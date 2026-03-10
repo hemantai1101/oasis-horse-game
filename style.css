@@ -16,7 +16,8 @@
   --player1-color: #e63946;
   --player2-color: #1d3557;
 
-  --cell-size: clamp(40px, 7vmin, 58px);
+  /* Board fits viewport: 11 cells + 10 gaps (20px) + 4px border each side + 8px page padding */
+  --cell-size: min(calc((100vw - 52px) / 11), 58px);
   --board-gap: 2px;
   --board-border: #7a5c2a;
 
@@ -32,9 +33,9 @@ body {
   font-family: 'Segoe UI', system-ui, sans-serif;
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 1rem;
+  padding: 0.5rem;
 }
 
 #app {
@@ -52,17 +53,16 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.6rem 1.2rem;
+  padding: 0.5rem 0.8rem;
   border-radius: 8px 8px 0 0;
   border-bottom: 2px solid var(--board-border);
-  min-width: calc(11 * var(--cell-size) + 10 * var(--board-gap) + 8px);
 }
 
 .player-score {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  font-size: 1rem;
+  gap: 0.4rem;
+  font-size: clamp(0.75rem, 2.5vw, 1rem);
 }
 
 .player-label {
@@ -74,32 +74,32 @@ body {
 .player2-side .player-label { color: #7eaaff; }
 
 .score {
-  font-size: 1.6rem;
+  font-size: clamp(1.2rem, 4vw, 1.6rem);
   font-weight: 700;
-  width: 1.6rem;
+  width: 1.4rem;
   text-align: center;
 }
 
 #round-indicator {
-  font-size: 0.9rem;
+  font-size: clamp(0.7rem, 2vw, 0.9rem);
   color: #c8a96e;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 /* ===== Status Bar ===== */
 #status-bar {
   width: 100%;
-  min-width: calc(11 * var(--cell-size) + 10 * var(--board-gap) + 8px);
   background: var(--status-bg);
   color: var(--status-text);
-  padding: 0.35rem 1rem;
-  font-size: 0.85rem;
+  padding: 0.3rem 0.6rem;
+  font-size: clamp(0.7rem, 2vw, 0.85rem);
   text-align: center;
-  min-height: 2rem;
+  min-height: 1.8rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  line-height: 1.3;
 }
 
 /* ===== Game Area ===== */
@@ -128,6 +128,9 @@ body {
   position: relative;
   transition: filter 0.12s;
   user-select: none;
+  /* prevent double-tap zoom and tap delay on mobile */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .cell.desert { background: var(--desert-color); }
@@ -161,22 +164,29 @@ body {
 }
 
 /* ===== Valid Move Highlights ===== */
+/* Full-cell tint + inset ring so every reachable cell is unmistakeable */
 .cell.valid-move::after {
   content: '';
   position: absolute;
-  inset: 22%;
-  border-radius: 50%;
+  inset: 0;
   pointer-events: none;
   z-index: 2;
-  transition: opacity 0.1s;
+  transition: opacity 0.12s;
 }
 
-.cell.valid-slide::after  { background: rgba(255, 230, 50, 0.65); }
-.cell.valid-knight::after { background: rgba(180, 100, 255, 0.65); }
+.cell.valid-slide::after {
+  background: rgba(255, 230, 50, 0.38);
+  box-shadow: inset 0 0 0 2px rgba(255, 220, 0, 0.85);
+}
 
-.cell.valid-move:hover::after { opacity: 0.85; }
+.cell.valid-knight::after {
+  background: rgba(180, 100, 255, 0.38);
+  box-shadow: inset 0 0 0 2px rgba(180, 80, 255, 0.85);
+}
 
-/* When a horse occupies a valid-move cell, dot sits on top */
+.cell.valid-move:hover::after { opacity: 0.7; }
+
+/* Horse on a valid-move cell sits above the tint */
 .cell.valid-move .horse { z-index: 3; }
 
 /* ===== Overlay ===== */
@@ -238,7 +248,9 @@ body {
   padding: 1rem 1.2rem;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s, transform 0.1s;
-  min-width: 140px;
+  min-width: 130px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .corner-card:hover {
@@ -265,7 +277,8 @@ body {
 /* Buttons */
 .btn {
   display: inline-block;
-  padding: 0.55rem 1.4rem;
+  padding: 0.65rem 1.6rem;
+  min-height: 44px;  /* Apple HIG touch target minimum */
   font-size: 1rem;
   background: var(--oasis-color);
   color: white;
@@ -276,6 +289,8 @@ body {
   transition: background 0.2s, transform 0.1s;
   font-weight: 600;
   letter-spacing: 0.02em;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .btn:hover {
@@ -318,11 +333,11 @@ body {
 /* ===== Legend ===== */
 #legend {
   display: flex;
-  gap: 1.4rem;
+  gap: 1.2rem;
   padding: 0.4rem 0.8rem;
   background: var(--status-bg);
   border-radius: 0 0 8px 8px;
-  min-width: calc(11 * var(--cell-size) + 10 * var(--board-gap) + 8px);
+  width: 100%;
   justify-content: center;
   border-top: 1px solid #1a0e00;
 }
@@ -344,3 +359,40 @@ body {
 
 .slide-dot  { background: rgba(255, 230, 50, 0.8); }
 .knight-dot { background: rgba(180, 100, 255, 0.8); }
+
+/* ===== Mobile adjustments ===== */
+@media (max-width: 480px) {
+  .overlay-panel {
+    padding: 1.2rem 1.2rem;
+  }
+
+  .overlay-panel h2 {
+    font-size: 1.3rem;
+  }
+
+  .overlay-panel p {
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+
+  .corner-card {
+    min-width: 110px;
+    padding: 0.8rem 0.8rem;
+  }
+
+  .corner-card h3 {
+    font-size: 0.85rem;
+  }
+
+  .winner-banner {
+    font-size: 1.6rem;
+  }
+
+  .score-display {
+    font-size: 1.3rem;
+  }
+
+  .legend-item {
+    font-size: 0.68rem;
+  }
+}

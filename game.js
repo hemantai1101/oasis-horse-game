@@ -73,16 +73,21 @@ function makeHorse(id, owner, col, row) {
 // ===== Move Calculation =====
 
 function getSlideRay(horse, dc, dr) {
-  const moves = [];
+  // Slide to the end: horse travels until it hits a wall or another horse.
+  // Only the final reachable cell in this direction is a valid destination.
+  let lastCol = null;
+  let lastRow = null;
   let c = horse.col + dc;
   let r = horse.row + dr;
   while (isOnBoard(c, r)) {
-    if (getHorseAt(c, r)) break;  // stop before occupied cell
-    moves.push({ col: c, row: r, moveType: 'slide' });
+    if (getHorseAt(c, r)) break;  // blocked — stop before this cell
+    lastCol = c;
+    lastRow = r;
     c += dc;
     r += dr;
   }
-  return moves;
+  if (lastCol === null) return [];  // no room to slide in this direction
+  return [{ col: lastCol, row: lastRow, moveType: 'slide' }];
 }
 
 function getSlideMoves(horse) {
@@ -278,11 +283,15 @@ function renderStatusBar() {
   }
   const name = `Player ${GameState.currentPlayer}`;
   if (GameState.selectedHorse) {
+    const parts = [];
     const slideCount  = GameState.validMoves.filter(m => m.moveType === 'slide').length;
     const knightCount = GameState.validMoves.filter(m => m.moveType === 'knight').length;
-    el.textContent = `${name}: ${slideCount} slide move${slideCount !== 1 ? 's' : ''} (yellow), ${knightCount} knight move${knightCount !== 1 ? 's' : ''} (purple) — click a highlighted cell`;
+    if (slideCount)  parts.push(`${slideCount} slide (yellow — slides to end)`);
+    if (knightCount) parts.push(`${knightCount} knight (purple — L-shape jump)`);
+    const summary = parts.length ? parts.join(', ') : 'no valid moves';
+    el.textContent = `${name}: ${summary} — tap a highlighted cell`;
   } else {
-    el.textContent = `${name}'s turn — click one of your horses to select it`;
+    el.textContent = `${name}'s turn — tap a horse to select it`;
   }
 }
 
