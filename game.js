@@ -303,9 +303,6 @@ function buildStartHTML() {
   return `
     <div class="overlay-panel">
       <h2>🐿️ Squirrel</h2>
-      <p>Race your squirrels to the Acorn!<br>
-         Slide to the end of a row, or<br>
-         knight-jump to a desert cell.</p>
       <button class="btn" data-action="start">Start Game</button>
     </div>
   `;
@@ -317,15 +314,28 @@ function buildGameOverHTML() {
   return `
     <div class="overlay-panel">
       <div class="winner-banner p${w}">${name} wins!</div>
-      <p>🌰 Acorn reached!</p>
       <button class="btn" data-action="again">Play Again</button>
     </div>
   `;
+}
+
+function showRulesModal() {
+  const modal = document.getElementById('rules-modal');
+  modal.classList.remove('hidden');
+}
+
+function hideRulesModal() {
+  document.getElementById('rules-modal').classList.add('hidden');
 }
 
 // ===== Entry Point =====
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('restart-btn').addEventListener('click', initGame);
+  document.getElementById('rules-btn').addEventListener('click', showRulesModal);
+  document.getElementById('rules-close').addEventListener('click', hideRulesModal);
+  document.getElementById('rules-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) hideRulesModal();
+  });
   initGame();
 });

@@ -11,6 +11,7 @@
     <header id="score-bar">
       <span id="header-title">🐿️ Squirrel</span>
       <button id="restart-btn" class="ctrl-btn">↺ Restart</button>
+      <button id="rules-btn" class="ctrl-btn">? Rules</button>
     </header>
 
     <div id="status-bar">
@@ -27,6 +28,24 @@
       <span class="legend-item"><span class="legend-dot knight-dot"></span> Knight (L-jump)</span>
     </div>
   </div>
+  <!-- Rules modal -->
+  <div id="rules-modal" class="hidden">
+    <div class="rules-panel">
+      <button id="rules-close" class="rules-close">✕</button>
+      <h2>How to Play</h2>
+      <div class="rules-body">
+        <p><strong>Goal:</strong> Be the first to move any squirrel onto the 🌰 Acorn in the center.</p>
+        <p><strong>Setup:</strong> White starts in two opposite corners (top-left &amp; bottom-right). Black takes the other two.</p>
+        <p><strong>On your turn, move one squirrel:</strong></p>
+        <ul>
+          <li><span class="rule-badge slide">Slide</span> Move in a straight line (up/down/left/right) until you hit the edge or another squirrel. You land on the last empty cell.</li>
+          <li><span class="rule-badge knight">Knight</span> Jump in an L-shape (like a chess knight), but only to <em>desert</em> cells.</li>
+        </ul>
+        <p><strong>You cannot</strong> land on or jump over another squirrel.</p>
+      </div>
+    </div>
+  </div>
+
   <script src="game.js"></script>
 </body>
 </html>
