@@ -58,33 +58,33 @@ body {
   border-bottom: 2px solid var(--board-border);
 }
 
-.player-score {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: clamp(0.75rem, 2.5vw, 1rem);
-}
-
 .player-label {
   font-weight: 600;
+  font-size: clamp(0.75rem, 2.5vw, 1rem);
   letter-spacing: 0.03em;
 }
 
-.player1-side .player-label { color: #ff8a8a; }
-.player2-side .player-label { color: #7eaaff; }
+.player1-side { color: #ff8a8a; }
+.player2-side { color: #7eaaff; }
 
-.score {
-  font-size: clamp(1.2rem, 4vw, 1.6rem);
-  font-weight: 700;
-  width: 1.4rem;
-  text-align: center;
+.theme-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(200,169,110,0.4);
+  color: #c8a96e;
+  padding: 0.3rem 0.7rem;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: clamp(0.65rem, 1.8vw, 0.8rem);
+  font-weight: 600;
+  transition: background 0.2s, border-color 0.2s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
 }
 
-#round-indicator {
-  font-size: clamp(0.7rem, 2vw, 0.9rem);
-  color: #c8a96e;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.theme-btn:hover {
+  background: rgba(255,255,255,0.16);
+  border-color: #c8a96e;
 }
 
 /* ===== Status Bar ===== */
@@ -143,6 +143,27 @@ body {
 .cell.desert:hover { background: var(--desert-hover); }
 .cell.forest:hover  { background: var(--forest-hover); }
 .cell.oasis:hover   { filter: brightness(1.1); }
+
+/* ===== Squirrel theme overrides ===== */
+body[data-theme="squirrel"] {
+  --desert-color: #b89060;
+  --desert-hover: #c8a070;
+  --forest-color: #3a6020;
+  --forest-hover: #4a7828;
+  --oasis-color:  #7a4a18;
+  --oasis-glow:   #d4880a;
+  --bg: #d4b880;
+}
+
+/* ===== Center symbol (e.g. acorn) ===== */
+.center-symbol {
+  font-size: calc(var(--cell-size) * 0.62);
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  position: relative;
+  z-index: 1;
+}
 
 /* ===== Horses ===== */
 .horse {
