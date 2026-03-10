@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oasis</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header id="score-bar">
+      <div class="player-score player1-side">
+        <span class="player-label">Player 1</span>
+        <span id="score-p1" class="score">0</span>
+      </div>
+      <div id="round-indicator">Round 1</div>
+      <div class="player-score player2-side">
+        <span id="score-p2" class="score">0</span>
+        <span class="player-label">Player 2</span>
+      </div>
+    </header>
+
+    <div id="status-bar">
+      <span id="status-text"></span>
+    </div>
+
+    <div id="game-area">
+      <div id="board"></div>
+      <div id="overlay" class="hidden"></div>
+    </div>
+
+    <div id="legend">
+      <span class="legend-item"><span class="legend-dot slide-dot"></span> Slide move</span>
+      <span class="legend-item"><span class="legend-dot knight-dot"></span> Knight move</span>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
