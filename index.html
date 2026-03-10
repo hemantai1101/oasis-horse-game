@@ -6,11 +6,14 @@
   <title>Oasis</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body data-theme="horse">
+<body data-theme="squirrel">
   <div id="app">
     <header id="score-bar">
       <div class="player-label player1-side">Player 1</div>
-      <button id="theme-btn" class="theme-btn">🐿️ Squirrel mode</button>
+      <div class="header-controls">
+        <button id="restart-btn" class="ctrl-btn" title="Restart">↺ Restart</button>
+        <button id="theme-btn" class="ctrl-btn">♞ Horse mode</button>
+      </div>
       <div class="player-label player2-side">Player 2</div>
     </header>
 
@@ -20,7 +23,7 @@
 
     <div id="game-area">
       <div id="board"></div>
-      <div id="overlay" class="hidden"></div>
+      <div id="overlay"></div>
     </div>
 
     <div id="legend">

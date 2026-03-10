@@ -13,10 +13,12 @@
   --oasis-color: #2a9d8f;
   --oasis-glow: #48cdc1;
 
-  --player1-color: #e63946;
-  --player2-color: #1d3557;
+  --player1-color: #d63030;
+  --player2-color: #1a3a8a;
+  --player1-bg:    #c0392b;
+  --player2-bg:    #1a3a6e;
 
-  /* Board fits viewport: 11 cells + 10 gaps (20px) + 4px border each side + 8px page padding */
+  /* Board fits viewport: 11 cells + 10 gaps (20px) + 8px border + 24px page padding */
   --cell-size: min(calc((100vw - 52px) / 11), 58px);
   --board-gap: 2px;
   --board-border: #7a5c2a;
@@ -26,6 +28,17 @@
   --header-text: #f5e6c0;
   --status-bg: #2a1a06;
   --status-text: #e8d5a0;
+}
+
+/* ===== Squirrel theme color overrides ===== */
+body[data-theme="squirrel"] {
+  --desert-color: #b89060;
+  --desert-hover: #c8a070;
+  --forest-color: #3a6020;
+  --forest-hover: #4a7828;
+  --oasis-color:  #7a4a18;
+  --oasis-glow:   #d4880a;
+  --bg: #d4b880;
 }
 
 body {
@@ -42,10 +55,9 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0;
 }
 
-/* ===== Score Bar ===== */
+/* ===== Header ===== */
 #score-bar {
   width: 100%;
   background: var(--header-bg);
@@ -56,34 +68,66 @@ body {
   padding: 0.5rem 0.8rem;
   border-radius: 8px 8px 0 0;
   border-bottom: 2px solid var(--board-border);
+  gap: 0.4rem;
 }
 
 .player-label {
-  font-weight: 600;
+  font-weight: 700;
   font-size: clamp(0.75rem, 2.5vw, 1rem);
   letter-spacing: 0.03em;
+  flex-shrink: 0;
 }
 
-.player1-side { color: #ff8a8a; }
-.player2-side { color: #7eaaff; }
+.player1-side { color: #ff8080; }
+.player2-side { color: #80aaff; }
 
-.theme-btn {
+/* Player color swatch dots in the header so it's always visible */
+.player1-side::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--player1-bg);
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.player2-side::after {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--player2-bg);
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+.header-controls {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ctrl-btn {
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(200,169,110,0.4);
   color: #c8a96e;
-  padding: 0.3rem 0.7rem;
-  border-radius: 20px;
+  padding: 0.28rem 0.6rem;
+  border-radius: 16px;
   cursor: pointer;
-  font-size: clamp(0.65rem, 1.8vw, 0.8rem);
+  font-size: clamp(0.6rem, 1.6vw, 0.75rem);
   font-weight: 600;
   transition: background 0.2s, border-color 0.2s;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   white-space: nowrap;
+  min-height: 32px;
 }
 
-.theme-btn:hover {
-  background: rgba(255,255,255,0.16);
+.ctrl-btn:hover {
+  background: rgba(255,255,255,0.18);
   border-color: #c8a96e;
 }
 
@@ -93,7 +137,7 @@ body {
   background: var(--status-bg);
   color: var(--status-text);
   padding: 0.3rem 0.6rem;
-  font-size: clamp(0.7rem, 2vw, 0.85rem);
+  font-size: clamp(0.68rem, 1.9vw, 0.84rem);
   text-align: center;
   min-height: 1.8rem;
   display: flex;
@@ -128,7 +172,6 @@ body {
   position: relative;
   transition: filter 0.12s;
   user-select: none;
-  /* prevent double-tap zoom and tap delay on mobile */
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
@@ -144,18 +187,7 @@ body {
 .cell.forest:hover  { background: var(--forest-hover); }
 .cell.oasis:hover   { filter: brightness(1.1); }
 
-/* ===== Squirrel theme overrides ===== */
-body[data-theme="squirrel"] {
-  --desert-color: #b89060;
-  --desert-hover: #c8a070;
-  --forest-color: #3a6020;
-  --forest-hover: #4a7828;
-  --oasis-color:  #7a4a18;
-  --oasis-glow:   #d4880a;
-  --bg: #d4b880;
-}
-
-/* ===== Center symbol (e.g. acorn) ===== */
+/* ===== Center symbol (acorn etc.) ===== */
 .center-symbol {
   font-size: calc(var(--cell-size) * 0.62);
   line-height: 1;
@@ -165,27 +197,55 @@ body[data-theme="squirrel"] {
   z-index: 1;
 }
 
-/* ===== Horses ===== */
+/* ===== Pieces ===== */
 .horse {
   font-size: calc(var(--cell-size) * 0.58);
   line-height: 1;
   cursor: pointer;
   transition: transform 0.15s, filter 0.15s;
-  filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.horse.player1 { color: var(--player1-color); }
-.horse.player2 { color: var(--player2-color); }
+/* --- Horse theme: color the chess knight glyph --- */
+body[data-theme="horse"] .horse.player1 {
+  color: var(--player1-color);
+  filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
+}
+body[data-theme="horse"] .horse.player2 {
+  color: var(--player2-color);
+  filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
+}
 
+/* --- Squirrel theme: colored disc behind the emoji ---
+   Emoji ignores CSS color, so we put each squirrel on a
+   strong red (P1) or navy (P2) circle to tell them apart. */
+body[data-theme="squirrel"] .horse {
+  width: calc(var(--cell-size) * 0.76);
+  height: calc(var(--cell-size) * 0.76);
+  border-radius: 50%;
+  font-size: calc(var(--cell-size) * 0.48);
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+}
+body[data-theme="squirrel"] .horse.player1 {
+  background: var(--player1-bg);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.35);
+}
+body[data-theme="squirrel"] .horse.player2 {
+  background: var(--player2-bg);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.35);
+}
+
+/* Selected piece glow */
 .horse.selected {
-  transform: scale(1.25);
-  filter: drop-shadow(0 0 5px gold) drop-shadow(0 0 10px rgba(255,210,0,0.6));
+  transform: scale(1.22);
+  filter: drop-shadow(0 0 5px gold) drop-shadow(0 0 10px rgba(255,210,0,0.6)) !important;
 }
 
 /* ===== Valid Move Highlights ===== */
-/* Full-cell tint + inset ring so every reachable cell is unmistakeable */
 .cell.valid-move::after {
   content: '';
   position: absolute;
@@ -205,151 +265,78 @@ body[data-theme="squirrel"] {
   box-shadow: inset 0 0 0 2px rgba(180, 80, 255, 0.85);
 }
 
-.cell.valid-move:hover::after { opacity: 0.7; }
-
-/* Horse on a valid-move cell sits above the tint */
+.cell.valid-move:hover::after { opacity: 0.65; }
 .cell.valid-move .horse { z-index: 3; }
 
 /* ===== Overlay ===== */
 #overlay {
   position: absolute;
   inset: 0;
-  background: rgba(15, 8, 0, 0.88);
+  background: rgba(12, 6, 0, 0.9);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   color: #f5e6c0;
   z-index: 20;
-  border-radius: 0;
 }
 
 #overlay.hidden { display: none; }
 
 .overlay-panel {
   text-align: center;
-  padding: 1.8rem 2.4rem;
+  padding: 2rem 2.6rem;
   background: rgba(0, 0, 0, 0.5);
-  border-radius: 12px;
+  border-radius: 14px;
   border: 2px solid #c8a96e;
   max-width: 90%;
 }
 
 .overlay-panel h2 {
-  font-size: 1.7rem;
-  margin-bottom: 0.5rem;
+  font-size: clamp(1.4rem, 5vw, 1.9rem);
+  margin-bottom: 0.6rem;
   letter-spacing: 0.02em;
 }
 
 .overlay-panel p {
   margin-bottom: 1.4rem;
   color: #c8a96e;
-  font-size: 0.95rem;
-  line-height: 1.5;
+  font-size: clamp(0.82rem, 2.5vw, 0.95rem);
+  line-height: 1.6;
 }
 
-.overlay-panel .subtitle {
-  font-size: 0.82rem;
-  color: #9a8060;
-  margin-bottom: 1.2rem;
+/* Win banner */
+.winner-banner {
+  font-size: clamp(1.5rem, 5vw, 2.2rem);
+  font-weight: 700;
+  margin-bottom: 0.5rem;
 }
-
-/* Corner selection cards */
-.corner-choices {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.corner-card {
-  background: rgba(200, 169, 110, 0.12);
-  border: 2px solid #6a5030;
-  border-radius: 10px;
-  padding: 1rem 1.2rem;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, transform 0.1s;
-  min-width: 130px;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.corner-card:hover {
-  background: rgba(200, 169, 110, 0.25);
-  border-color: #c8a96e;
-  transform: translateY(-2px);
-}
-
-.corner-card h3 {
-  font-size: 1rem;
-  color: #f5e6c0;
-  margin-bottom: 0.3rem;
-}
-
-.corner-card .corner-detail {
-  font-size: 0.78rem;
-  color: #9a8060;
-  line-height: 1.4;
-}
-
-.corner-card .p1-corners { color: #ff8a8a; }
-.corner-card .p2-corners { color: #7eaaff; }
+.winner-banner.p1 { color: #ff8080; }
+.winner-banner.p2 { color: #80aaff; }
 
 /* Buttons */
 .btn {
   display: inline-block;
-  padding: 0.65rem 1.6rem;
-  min-height: 44px;  /* Apple HIG touch target minimum */
+  padding: 0.65rem 1.8rem;
+  min-height: 44px;
   font-size: 1rem;
   background: var(--oasis-color);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   margin: 0.3rem;
   transition: background 0.2s, transform 0.1s;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 
 .btn:hover {
   background: var(--oasis-glow);
-  transform: scale(1.04);
+  transform: scale(1.05);
 }
-
-.btn.secondary {
-  background: #4a3a20;
-  color: #c8a96e;
-}
-
-.btn.secondary:hover {
-  background: #5a4a2a;
-}
-
-/* Win/Score display in overlay */
-.winner-banner {
-  font-size: 2.2rem;
-  margin-bottom: 0.3rem;
-}
-
-.winner-banner.p1 { color: #ff8a8a; }
-.winner-banner.p2 { color: #7eaaff; }
-
-.score-display {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  font-size: 1.6rem;
-  font-weight: 700;
-  margin-bottom: 1.2rem;
-}
-
-.score-display .p1-score { color: #ff8a8a; }
-.score-display .p2-score { color: #7eaaff; }
-.score-display .score-sep { color: #6a5030; }
 
 /* ===== Legend ===== */
 #legend {
@@ -367,7 +354,7 @@ body[data-theme="squirrel"] {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.75rem;
+  font-size: clamp(0.65rem, 1.8vw, 0.75rem);
   color: #9a8060;
 }
 
@@ -376,44 +363,18 @@ body[data-theme="squirrel"] {
   width: 12px;
   height: 12px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.slide-dot  { background: rgba(255, 230, 50, 0.8); }
-.knight-dot { background: rgba(180, 100, 255, 0.8); }
+.slide-dot  { background: rgba(255, 230, 50, 0.85); }
+.knight-dot { background: rgba(180, 100, 255, 0.85); }
 
-/* ===== Mobile adjustments ===== */
+/* ===== Mobile ===== */
 @media (max-width: 480px) {
   .overlay-panel {
-    padding: 1.2rem 1.2rem;
+    padding: 1.4rem 1.2rem;
   }
-
-  .overlay-panel h2 {
-    font-size: 1.3rem;
-  }
-
-  .overlay-panel p {
-    font-size: 0.85rem;
-    margin-bottom: 1rem;
-  }
-
-  .corner-card {
-    min-width: 110px;
-    padding: 0.8rem 0.8rem;
-  }
-
-  .corner-card h3 {
-    font-size: 0.85rem;
-  }
-
   .winner-banner {
-    font-size: 1.6rem;
-  }
-
-  .score-display {
-    font-size: 1.3rem;
-  }
-
-  .legend-item {
-    font-size: 0.68rem;
+    font-size: 1.5rem;
   }
 }

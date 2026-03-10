@@ -12,16 +12,17 @@ const ZONE = {
 };
 
 const CORNER_CONFIGS = {
-  TL: { positions: [[1,1],[2,1],[3,1],[1,2],[1,3]],       label: 'Top-Left'     },
-  TR: { positions: [[11,1],[10,1],[9,1],[11,2],[11,3]],    label: 'Top-Right'    },
-  BL: { positions: [[1,11],[2,11],[3,11],[1,10],[1,9]],    label: 'Bottom-Left'  },
-  BR: { positions: [[11,11],[10,11],[9,11],[11,10],[11,9]],label: 'Bottom-Right' },
+  TL: { positions: [[1,1],[2,1],[3,1],[1,2],[1,3]],        label: 'Top-Left'     },
+  TR: { positions: [[11,1],[10,1],[9,1],[11,2],[11,3]],     label: 'Top-Right'    },
+  BL: { positions: [[1,11],[2,11],[3,11],[1,10],[1,9]],     label: 'Bottom-Left'  },
+  BR: { positions: [[11,11],[10,11],[9,11],[11,10],[11,9]], label: 'Bottom-Right' },
 };
 
-const DIAGONAL_PAIRS = [
-  { p1: ['TL', 'BR'], p2: ['TR', 'BL'], label: 'Top-Left + Bottom-Right' },
-  { p1: ['TR', 'BL'], p2: ['TL', 'BR'], label: 'Top-Right + Bottom-Left' },
-];
+// Fixed corner assignment: P1 = TL+BR, P2 = TR+BL
+const PLAYER_CORNERS = {
+  1: ['TL', 'BR'],
+  2: ['TR', 'BL'],
+};
 
 const KNIGHT_OFFSETS = [
   [+2, +1], [+2, -1], [-2, +1], [-2, -1],
@@ -36,18 +37,20 @@ const THEMES = {
     centerSymbol: null,
     goalName:     'Oasis',
     pieceName:    'horse',
-    titleLabel:   'Oasis',
+    title:        'Oasis',
+    tagline:      'Race your horses to the Oasis!',
   },
   squirrel: {
     piece:        '🐿️',
     centerSymbol: '🌰',
     goalName:     'Acorn',
     pieceName:    'squirrel',
-    titleLabel:   '🐿️ Squirrel',
+    title:        '🐿️ Squirrel',
+    tagline:      'Race your squirrels to the Acorn!',
   },
 };
 
-let currentTheme = 'horse';
+let currentTheme = 'squirrel';
 
 function theme() {
   return THEMES[currentTheme];
@@ -64,8 +67,7 @@ function toggleTheme() {
 // ===== Game State =====
 
 let GameState = {
-  phase: 'corner_selection',  // 'corner_selection' | 'playing' | 'game_over'
-  cornerChoice: null,
+  phase: 'start',   // 'start' | 'playing' | 'game_over'
   board: {},
   horses: [],
   currentPlayer: 1,
@@ -102,6 +104,8 @@ function makeHorse(id, owner, col, row) {
 // ===== Move Calculation =====
 
 function getSlideRay(horse, dc, dr) {
+  // Horse slides until it hits the board edge or another piece.
+  // Only the final reachable cell is a valid destination.
   let lastCol = null;
   let lastRow = null;
   let c = horse.col + dc;
@@ -147,8 +151,7 @@ function getValidMoves(horse) {
 
 function initGame() {
   GameState = {
-    phase: 'corner_selection',
-    cornerChoice: null,
+    phase: 'start',
     board: {},
     horses: [],
     currentPlayer: 1,
@@ -159,11 +162,6 @@ function initGame() {
   render();
 }
 
-function handleCornerSelection(pairIndex) {
-  GameState.cornerChoice = pairIndex;
-  startGame();
-}
-
 function startGame() {
   GameState.phase = 'playing';
   GameState.board = {};
@@ -171,28 +169,20 @@ function startGame() {
   GameState.selectedHorse = null;
   GameState.validMoves = [];
   GameState.currentPlayer = 1;
+  GameState.winner = null;
   placeInitialHorses();
   render();
 }
 
 function placeInitialHorses() {
-  const pair = DIAGONAL_PAIRS[GameState.cornerChoice];
-  let p1id = 0;
-  let p2id = 0;
-
-  for (const cornerKey of pair.p1) {
-    for (const [col, row] of CORNER_CONFIGS[cornerKey].positions) {
-      const h = makeHorse(`p1_h${p1id++}`, 1, col, row);
-      GameState.horses.push(h);
-      GameState.board[boardKey(col, row)] = h;
-    }
-  }
-
-  for (const cornerKey of pair.p2) {
-    for (const [col, row] of CORNER_CONFIGS[cornerKey].positions) {
-      const h = makeHorse(`p2_h${p2id++}`, 2, col, row);
-      GameState.horses.push(h);
-      GameState.board[boardKey(col, row)] = h;
+  for (const player of [1, 2]) {
+    let id = 0;
+    for (const cornerKey of PLAYER_CORNERS[player]) {
+      for (const [col, row] of CORNER_CONFIGS[cornerKey].positions) {
+        const h = makeHorse(`p${player}_h${id++}`, player, col, row);
+        GameState.horses.push(h);
+        GameState.board[boardKey(col, row)] = h;
+      }
     }
   }
 }
@@ -283,7 +273,7 @@ function renderStatusBar() {
     const summary = parts.length ? parts.join(', ') : 'no valid moves';
     el.textContent = `${name}: ${summary} — tap a highlighted cell`;
   } else {
-    el.textContent = `${name}'s turn — tap a ${theme().pieceName} to select it`;
+    el.textContent = `${name}'s turn — tap a ${theme().pieceName} to select`;
   }
 }
 
@@ -303,11 +293,9 @@ function renderBoard() {
       cell.className = `cell ${zone}`;
 
       const moveType = validMoveSet.get(boardKey(col, row));
-      if (moveType) {
-        cell.classList.add('valid-move', `valid-${moveType}`);
-      }
+      if (moveType) cell.classList.add('valid-move', `valid-${moveType}`);
 
-      // Center symbol (acorn etc.) shown when no piece is on the oasis
+      // Center goal symbol when unoccupied
       if (zone === ZONE.OASIS && theme().centerSymbol && !getHorseAt(col, row)) {
         const sym = document.createElement('div');
         sym.className = 'center-symbol';
@@ -324,8 +312,7 @@ function renderBoard() {
         cell.appendChild(horseEl);
       }
 
-      const c = col;
-      const r = row;
+      const c = col, r = row;
       cell.addEventListener('click', () => handleCellClick(c, r));
       boardEl.appendChild(cell);
     }
@@ -335,8 +322,8 @@ function renderBoard() {
 function renderPhaseOverlay() {
   const overlay = document.getElementById('overlay');
 
-  if (GameState.phase === 'corner_selection') {
-    overlay.innerHTML = buildCornerSelectionHTML();
+  if (GameState.phase === 'start') {
+    overlay.innerHTML = buildStartHTML();
     overlay.classList.remove('hidden');
   } else if (GameState.phase === 'game_over') {
     overlay.innerHTML = buildGameOverHTML();
@@ -346,30 +333,22 @@ function renderPhaseOverlay() {
     return;
   }
 
-  attachOverlayHandlers();
+  // Wire overlay buttons
+  overlay.querySelectorAll('[data-action]').forEach(el => {
+    el.addEventListener('click', () => {
+      if (el.dataset.action === 'start')      startGame();
+      else if (el.dataset.action === 'play-again') initGame();
+    });
+  });
 }
 
-function buildCornerSelectionHTML() {
-  function cornerNames(keys) {
-    return keys.map(k => CORNER_CONFIGS[k].label).join(' &amp; ');
-  }
-
+function buildStartHTML() {
   const t = theme();
   return `
     <div class="overlay-panel">
-      <h2>Choose Your Corners</h2>
-      <p>Player 1, pick your two diagonal corners.<br>Player 2 gets the remaining pair.<br>Race your ${t.pieceName}s to the ${t.goalName}!</p>
-      <div class="corner-choices">
-        ${DIAGONAL_PAIRS.map((pair, i) => `
-          <div class="corner-card" data-action="corner" data-pair="${i}">
-            <h3>${cornerNames(pair.p1)}</h3>
-            <div class="corner-detail">
-              <div class="p1-corners">Player 1: ${cornerNames(pair.p1)}</div>
-              <div class="p2-corners">Player 2: ${cornerNames(pair.p2)}</div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
+      <h2>${t.title}</h2>
+      <p>${t.tagline}<br>Slide to the end of a row, or<br>knight-jump to a desert cell.</p>
+      <button class="btn" data-action="start">Start Game</button>
     </div>
   `;
 }
@@ -377,30 +356,20 @@ function buildCornerSelectionHTML() {
 function buildGameOverHTML() {
   const w = GameState.winner;
   const t = theme();
-  const centerDisplay = t.centerSymbol ? `${t.centerSymbol} ` : '';
+  const center = t.centerSymbol ? `${t.centerSymbol} ` : '';
   return `
     <div class="overlay-panel">
       <div class="winner-banner p${w}">Player ${w} wins!</div>
-      <p>${centerDisplay}${t.goalName} reached — congratulations!</p>
+      <p>${center}${t.goalName} reached!</p>
       <button class="btn" data-action="play-again">Play Again</button>
     </div>
   `;
-}
-
-function attachOverlayHandlers() {
-  const overlay = document.getElementById('overlay');
-  overlay.querySelectorAll('[data-action]').forEach(el => {
-    el.addEventListener('click', () => {
-      const action = el.dataset.action;
-      if (action === 'corner')      handleCornerSelection(parseInt(el.dataset.pair, 10));
-      else if (action === 'play-again') initGame();
-    });
-  });
 }
 
 // ===== Entry Point =====
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('theme-btn').addEventListener('click', toggleTheme);
+  document.getElementById('restart-btn').addEventListener('click', initGame);
   initGame();
 });
