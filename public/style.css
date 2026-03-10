@@ -376,12 +376,31 @@ body {
 .rule-badge.knight { background: rgba(180,100,255,0.25); color: #cc88ff; border: 1px solid rgba(180,100,255,0.4); }
 
 /* ===== GitHub Badge ===== */
+.tribute-note {
+  margin-top: 1rem;
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid #e075a0;
+  background: rgba(224, 117, 160, 0.08);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.85rem;
+  color: #d4a0bb;
+}
+
 .rules-footer {
   margin-top: 1.2rem;
   padding-top: 1rem;
   border-top: 1px solid rgba(200, 169, 110, 0.25);
   display: flex;
-  justify-content: center;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.dedication {
+  font-size: 0.75rem;
+  color: #e075a0;
+  font-style: italic;
+  white-space: nowrap;
 }
 
 .github-badge {
