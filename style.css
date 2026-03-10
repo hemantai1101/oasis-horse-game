@@ -264,7 +264,7 @@ body {
 .winner-banner {
   font-size: clamp(1.4rem, 5vw, 2rem);
   font-weight: 700;
-  margin-bottom: 0.9rem;
+  margin: 0.8rem 0 1.2rem;
 }
 
 /* White winner: show on a dark background — keep text light */
