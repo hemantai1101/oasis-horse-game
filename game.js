@@ -44,6 +44,7 @@ let GameState = {
   selectedHorse: null,
   validMoves: [],
   winner: null,
+  totalMoves: 0,
 };
 
 // ===== Utility Functions =====
@@ -112,7 +113,10 @@ function getValidMoves(horse) {
 
 // ===== Game Flow =====
 
-function initGame() {
+function initGame(isRestart = false) {
+  if (isRestart) {
+    posthog.capture('game_restarted', { from_phase: GameState.phase, moves_played: GameState.totalMoves });
+  }
   GameState = {
     phase: 'start',
     board: {},
@@ -121,11 +125,13 @@ function initGame() {
     selectedHorse: null,
     validMoves: [],
     winner: null,
+    totalMoves: 0,
   };
   render();
 }
 
 function startGame() {
+  posthog.capture('game_started');
   GameState.phase = 'playing';
   GameState.board = {};
   GameState.horses = [];
@@ -178,6 +184,12 @@ function handleCellClick(col, row) {
 function selectHorse(horse) {
   GameState.selectedHorse = horse;
   GameState.validMoves = getValidMoves(horse);
+  posthog.capture('piece_selected', {
+    player: PLAYER_NAME[horse.owner],
+    from: { col: horse.col, row: horse.row },
+    slide_moves: GameState.validMoves.filter(m => m.moveType === 'slide').length,
+    knight_moves: GameState.validMoves.filter(m => m.moveType === 'knight').length,
+  });
   render();
 }
 
@@ -188,16 +200,30 @@ function deselectHorse() {
 }
 
 function executeMove(horse, move) {
+  const fromCol = horse.col, fromRow = horse.row;
   delete GameState.board[boardKey(horse.col, horse.row)];
   horse.col = move.col;
   horse.row = move.row;
   GameState.board[boardKey(move.col, move.row)] = horse;
+  GameState.totalMoves++;
+
+  posthog.capture('move_executed', {
+    player: PLAYER_NAME[GameState.currentPlayer],
+    move_type: move.moveType,
+    from: { col: fromCol, row: fromRow },
+    to: { col: move.col, row: move.row },
+    move_number: GameState.totalMoves,
+  });
 
   if (move.col === CENTER.col && move.row === CENTER.row) {
     GameState.winner = GameState.currentPlayer;
     GameState.selectedHorse = null;
     GameState.validMoves = [];
     GameState.phase = 'game_over';
+    posthog.capture('game_over', {
+      winner: PLAYER_NAME[GameState.winner],
+      total_moves: GameState.totalMoves,
+    });
     render();
     return;
   }
@@ -320,6 +346,7 @@ function buildGameOverHTML() {
 }
 
 function showRulesModal() {
+  posthog.capture('rules_opened');
   const modal = document.getElementById('rules-modal');
   modal.classList.remove('hidden');
 }
@@ -331,7 +358,7 @@ function hideRulesModal() {
 // ===== Entry Point =====
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('restart-btn').addEventListener('click', initGame);
+  document.getElementById('restart-btn').addEventListener('click', () => initGame(true));
   document.getElementById('rules-btn').addEventListener('click', showRulesModal);
   document.getElementById('rules-close').addEventListener('click', hideRulesModal);
   document.getElementById('rules-modal').addEventListener('click', e => {
