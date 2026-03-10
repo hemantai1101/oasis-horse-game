@@ -6,39 +6,28 @@
 }
 
 :root {
-  --desert-color: #c8a96e;
-  --desert-hover: #d4b87a;
-  --forest-color: #5a7a3a;
-  --forest-hover: #6a8e46;
-  --oasis-color: #2a9d8f;
-  --oasis-glow: #48cdc1;
-
-  --player1-color: #d63030;
-  --player2-color: #1a3a8a;
-  --player1-bg:    #c0392b;
-  --player2-bg:    #1a3a6e;
-
-  /* Board fits viewport: 11 cells + 10 gaps (20px) + 8px border + 24px page padding */
-  --cell-size: min(calc((100vw - 52px) / 11), 58px);
-  --board-gap: 2px;
-  --board-border: #7a5c2a;
-
-  --bg: #f0e0b0;
-  --header-bg: #3a2a10;
-  --header-text: #f5e6c0;
-  --status-bg: #2a1a06;
-  --status-text: #e8d5a0;
-}
-
-/* ===== Squirrel theme color overrides ===== */
-body[data-theme="squirrel"] {
   --desert-color: #b89060;
   --desert-hover: #c8a070;
   --forest-color: #3a6020;
   --forest-hover: #4a7828;
   --oasis-color:  #7a4a18;
   --oasis-glow:   #d4880a;
+
+  /* White squirrel (P1) and Black squirrel (P2) */
+  --p1-bg:   #f4f0e8;
+  --p1-ring: rgba(0, 0, 0, 0.30);
+  --p2-bg:   #1c1c1c;
+  --p2-ring: rgba(255, 255, 255, 0.20);
+
+  --cell-size: min(calc((100vw - 52px) / 11), 58px);
+  --board-gap: 2px;
+  --board-border: #7a5c2a;
+
   --bg: #d4b880;
+  --header-bg: #3a2a10;
+  --header-text: #f5e6c0;
+  --status-bg: #2a1a06;
+  --status-text: #e8d5a0;
 }
 
 body {
@@ -68,56 +57,23 @@ body {
   padding: 0.5rem 0.8rem;
   border-radius: 8px 8px 0 0;
   border-bottom: 2px solid var(--board-border);
-  gap: 0.4rem;
 }
 
-.player-label {
+#header-title {
   font-weight: 700;
-  font-size: clamp(0.75rem, 2.5vw, 1rem);
-  letter-spacing: 0.03em;
-  flex-shrink: 0;
-}
-
-.player1-side { color: #ff8080; }
-.player2-side { color: #80aaff; }
-
-/* Player color swatch dots in the header so it's always visible */
-.player1-side::before {
-  content: '';
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--player1-bg);
-  margin-right: 5px;
-  vertical-align: middle;
-}
-.player2-side::after {
-  content: '';
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--player2-bg);
-  margin-left: 5px;
-  vertical-align: middle;
-}
-
-.header-controls {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-  flex-shrink: 0;
+  font-size: clamp(0.85rem, 2.5vw, 1.05rem);
+  letter-spacing: 0.02em;
+  color: var(--header-text);
 }
 
 .ctrl-btn {
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(200,169,110,0.4);
   color: #c8a96e;
-  padding: 0.28rem 0.6rem;
+  padding: 0.28rem 0.7rem;
   border-radius: 16px;
   cursor: pointer;
-  font-size: clamp(0.6rem, 1.6vw, 0.75rem);
+  font-size: clamp(0.65rem, 1.8vw, 0.8rem);
   font-weight: 600;
   transition: background 0.2s, border-color 0.2s;
   touch-action: manipulation;
@@ -143,7 +99,27 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 0.3rem;
   line-height: 1.3;
+}
+
+/* Inline turn indicator dot in the status bar */
+.turn-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  vertical-align: middle;
+  margin-right: 3px;
+}
+.turn-dot.p1 {
+  background: var(--p1-bg);
+  border: 1.5px solid rgba(0,0,0,0.35);
+}
+.turn-dot.p2 {
+  background: var(--p2-bg);
+  border: 1.5px solid rgba(255,255,255,0.30);
 }
 
 /* ===== Game Area ===== */
@@ -187,7 +163,7 @@ body {
 .cell.forest:hover  { background: var(--forest-hover); }
 .cell.oasis:hover   { filter: brightness(1.1); }
 
-/* ===== Center symbol (acorn etc.) ===== */
+/* ===== Center symbol ===== */
 .center-symbol {
   font-size: calc(var(--cell-size) * 0.62);
   line-height: 1;
@@ -197,52 +173,40 @@ body {
   z-index: 1;
 }
 
-/* ===== Pieces ===== */
+/* ===== Pieces =====
+   CSS color has no effect on emoji, so each squirrel sits on a
+   colored disc: off-white circle for White (P1), near-black for Black (P2).
+   A thin ring border ensures the disc reads clearly on any cell color. */
 .horse {
-  font-size: calc(var(--cell-size) * 0.58);
-  line-height: 1;
-  cursor: pointer;
-  transition: transform 0.15s, filter 0.15s;
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* --- Horse theme: color the chess knight glyph --- */
-body[data-theme="horse"] .horse.player1 {
-  color: var(--player1-color);
-  filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
-}
-body[data-theme="horse"] .horse.player2 {
-  color: var(--player2-color);
-  filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
-}
-
-/* --- Squirrel theme: colored disc behind the emoji ---
-   Emoji ignores CSS color, so we put each squirrel on a
-   strong red (P1) or navy (P2) circle to tell them apart. */
-body[data-theme="squirrel"] .horse {
   width: calc(var(--cell-size) * 0.76);
   height: calc(var(--cell-size) * 0.76);
   border-radius: 50%;
   font-size: calc(var(--cell-size) * 0.48);
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
-}
-body[data-theme="squirrel"] .horse.player1 {
-  background: var(--player1-bg);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.35);
-}
-body[data-theme="squirrel"] .horse.player2 {
-  background: var(--player2-bg);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.35);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  position: relative;
+  z-index: 1;
 }
 
-/* Selected piece glow */
+.horse.player1 {
+  background: var(--p1-bg);
+  border: 2px solid var(--p1-ring);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.30);
+}
+
+.horse.player2 {
+  background: var(--p2-bg);
+  border: 2px solid var(--p2-ring);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.45);
+}
+
 .horse.selected {
   transform: scale(1.22);
-  filter: drop-shadow(0 0 5px gold) drop-shadow(0 0 10px rgba(255,210,0,0.6)) !important;
+  box-shadow: 0 0 0 3px gold, 0 0 12px rgba(255,210,0,0.65) !important;
 }
 
 /* ===== Valid Move Highlights ===== */
@@ -272,7 +236,7 @@ body[data-theme="squirrel"] .horse.player2 {
 #overlay {
   position: absolute;
   inset: 0;
-  background: rgba(12, 6, 0, 0.9);
+  background: rgba(12, 6, 0, 0.90);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -295,7 +259,6 @@ body[data-theme="squirrel"] .horse.player2 {
 .overlay-panel h2 {
   font-size: clamp(1.4rem, 5vw, 1.9rem);
   margin-bottom: 0.6rem;
-  letter-spacing: 0.02em;
 }
 
 .overlay-panel p {
@@ -305,16 +268,17 @@ body[data-theme="squirrel"] .horse.player2 {
   line-height: 1.6;
 }
 
-/* Win banner */
 .winner-banner {
-  font-size: clamp(1.5rem, 5vw, 2.2rem);
+  font-size: clamp(1.4rem, 5vw, 2rem);
   font-weight: 700;
   margin-bottom: 0.5rem;
 }
-.winner-banner.p1 { color: #ff8080; }
-.winner-banner.p2 { color: #80aaff; }
 
-/* Buttons */
+/* White winner: show on a dark background — keep text light */
+.winner-banner.p1 { color: #e8e0d0; }
+/* Black winner: use gold so it reads on the dark overlay */
+.winner-banner.p2 { color: #e8c84a; }
+
 .btn {
   display: inline-block;
   padding: 0.65rem 1.8rem;
@@ -325,7 +289,6 @@ body[data-theme="squirrel"] .horse.player2 {
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  margin: 0.3rem;
   transition: background 0.2s, transform 0.1s;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -371,10 +334,6 @@ body[data-theme="squirrel"] .horse.player2 {
 
 /* ===== Mobile ===== */
 @media (max-width: 480px) {
-  .overlay-panel {
-    padding: 1.4rem 1.2rem;
-  }
-  .winner-banner {
-    font-size: 1.5rem;
-  }
+  .overlay-panel { padding: 1.4rem 1.2rem; }
+  .winner-banner { font-size: 1.5rem; }
 }

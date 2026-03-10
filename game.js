@@ -12,57 +12,27 @@ const ZONE = {
 };
 
 const CORNER_CONFIGS = {
-  TL: { positions: [[1,1],[2,1],[3,1],[1,2],[1,3]],        label: 'Top-Left'     },
-  TR: { positions: [[11,1],[10,1],[9,1],[11,2],[11,3]],     label: 'Top-Right'    },
-  BL: { positions: [[1,11],[2,11],[3,11],[1,10],[1,9]],     label: 'Bottom-Left'  },
-  BR: { positions: [[11,11],[10,11],[9,11],[11,10],[11,9]], label: 'Bottom-Right' },
+  TL: { positions: [[1,1],[2,1],[3,1],[1,2],[1,3]]        },
+  TR: { positions: [[11,1],[10,1],[9,1],[11,2],[11,3]]     },
+  BL: { positions: [[1,11],[2,11],[3,11],[1,10],[1,9]]     },
+  BR: { positions: [[11,11],[10,11],[9,11],[11,10],[11,9]] },
 };
 
-// Fixed corner assignment: P1 = TL+BR, P2 = TR+BL
+// Fixed corner assignment: White (P1) = TL+BR, Black (P2) = TR+BL
 const PLAYER_CORNERS = {
   1: ['TL', 'BR'],
   2: ['TR', 'BL'],
 };
+
+const PLAYER_NAME = { 1: 'White', 2: 'Black' };
 
 const KNIGHT_OFFSETS = [
   [+2, +1], [+2, -1], [-2, +1], [-2, -1],
   [+1, +2], [+1, -2], [-1, +2], [-1, -2],
 ];
 
-// ===== Themes =====
-
-const THEMES = {
-  horse: {
-    piece:        '♞',
-    centerSymbol: null,
-    goalName:     'Oasis',
-    pieceName:    'horse',
-    title:        'Oasis',
-    tagline:      'Race your horses to the Oasis!',
-  },
-  squirrel: {
-    piece:        '🐿️',
-    centerSymbol: '🌰',
-    goalName:     'Acorn',
-    pieceName:    'squirrel',
-    title:        '🐿️ Squirrel',
-    tagline:      'Race your squirrels to the Acorn!',
-  },
-};
-
-let currentTheme = 'squirrel';
-
-function theme() {
-  return THEMES[currentTheme];
-}
-
-function toggleTheme() {
-  currentTheme = currentTheme === 'horse' ? 'squirrel' : 'horse';
-  document.body.dataset.theme = currentTheme;
-  document.getElementById('theme-btn').textContent =
-    currentTheme === 'horse' ? '🐿️ Squirrel mode' : '♞ Horse mode';
-  render();
-}
+const PIECE  = '🐿️';
+const CENTER_SYMBOL = '🌰';
 
 // ===== Game State =====
 
@@ -104,18 +74,12 @@ function makeHorse(id, owner, col, row) {
 // ===== Move Calculation =====
 
 function getSlideRay(horse, dc, dr) {
-  // Horse slides until it hits the board edge or another piece.
-  // Only the final reachable cell is a valid destination.
-  let lastCol = null;
-  let lastRow = null;
-  let c = horse.col + dc;
-  let r = horse.row + dr;
+  let lastCol = null, lastRow = null;
+  let c = horse.col + dc, r = horse.row + dr;
   while (isOnBoard(c, r)) {
     if (getHorseAt(c, r)) break;
-    lastCol = c;
-    lastRow = r;
-    c += dc;
-    r += dr;
+    lastCol = c; lastRow = r;
+    c += dc; r += dr;
   }
   if (lastCol === null) return [];
   return [{ col: lastCol, row: lastRow, moveType: 'slide' }];
@@ -133,8 +97,7 @@ function getSlideMoves(horse) {
 function getKnightMoves(horse) {
   const moves = [];
   for (const [dc, dr] of KNIGHT_OFFSETS) {
-    const c = horse.col + dc;
-    const r = horse.row + dr;
+    const c = horse.col + dc, r = horse.row + dr;
     if (!isOnBoard(c, r)) continue;
     if (getHorseAt(c, r)) continue;
     if (getZone(c, r) !== ZONE.DESERT) continue;
@@ -231,21 +194,17 @@ function executeMove(horse, move) {
   GameState.board[boardKey(move.col, move.row)] = horse;
 
   if (move.col === CENTER.col && move.row === CENTER.row) {
-    handleGameWin(GameState.currentPlayer);
+    GameState.winner = GameState.currentPlayer;
+    GameState.selectedHorse = null;
+    GameState.validMoves = [];
+    GameState.phase = 'game_over';
+    render();
     return;
   }
 
   GameState.selectedHorse = null;
   GameState.validMoves = [];
   GameState.currentPlayer = GameState.currentPlayer === 1 ? 2 : 1;
-  render();
-}
-
-function handleGameWin(player) {
-  GameState.winner = player;
-  GameState.selectedHorse = null;
-  GameState.validMoves = [];
-  GameState.phase = 'game_over';
   render();
 }
 
@@ -259,21 +218,21 @@ function render() {
 
 function renderStatusBar() {
   const el = document.getElementById('status-text');
-  if (GameState.phase !== 'playing') {
-    el.textContent = '';
-    return;
-  }
-  const name = `Player ${GameState.currentPlayer}`;
+  if (GameState.phase !== 'playing') { el.innerHTML = ''; return; }
+
+  const name = PLAYER_NAME[GameState.currentPlayer];
+  const cls  = `turn-dot p${GameState.currentPlayer}`;
+
   if (GameState.selectedHorse) {
-    const parts = [];
     const slideCount  = GameState.validMoves.filter(m => m.moveType === 'slide').length;
     const knightCount = GameState.validMoves.filter(m => m.moveType === 'knight').length;
-    if (slideCount)  parts.push(`${slideCount} slide (yellow)`);
-    if (knightCount) parts.push(`${knightCount} knight (purple)`);
+    const parts = [];
+    if (slideCount)  parts.push(`${slideCount} slide`);
+    if (knightCount) parts.push(`${knightCount} knight`);
     const summary = parts.length ? parts.join(', ') : 'no valid moves';
-    el.textContent = `${name}: ${summary} — tap a highlighted cell`;
+    el.innerHTML = `<span class="${cls}"></span>${name}: ${summary} — tap a highlighted cell`;
   } else {
-    el.textContent = `${name}'s turn — tap a ${theme().pieceName} to select`;
+    el.innerHTML = `<span class="${cls}"></span>${name}'s turn — tap a squirrel to select`;
   }
 }
 
@@ -289,17 +248,16 @@ function renderBoard() {
   for (let row = 1; row <= BOARD_SIZE; row++) {
     for (let col = 1; col <= BOARD_SIZE; col++) {
       const cell = document.createElement('div');
-      const zone = getZone(col, row);
-      cell.className = `cell ${zone}`;
+      cell.className = `cell ${getZone(col, row)}`;
 
       const moveType = validMoveSet.get(boardKey(col, row));
       if (moveType) cell.classList.add('valid-move', `valid-${moveType}`);
 
-      // Center goal symbol when unoccupied
-      if (zone === ZONE.OASIS && theme().centerSymbol && !getHorseAt(col, row)) {
+      const zone = getZone(col, row);
+      if (zone === ZONE.OASIS && !getHorseAt(col, row)) {
         const sym = document.createElement('div');
         sym.className = 'center-symbol';
-        sym.textContent = theme().centerSymbol;
+        sym.textContent = CENTER_SYMBOL;
         cell.appendChild(sym);
       }
 
@@ -308,7 +266,7 @@ function renderBoard() {
         const horseEl = document.createElement('div');
         horseEl.className = `horse player${horse.owner}`;
         if (horse.id === selectedId) horseEl.classList.add('selected');
-        horseEl.textContent = theme().piece;
+        horseEl.textContent = PIECE;
         cell.appendChild(horseEl);
       }
 
@@ -333,35 +291,34 @@ function renderPhaseOverlay() {
     return;
   }
 
-  // Wire overlay buttons
   overlay.querySelectorAll('[data-action]').forEach(el => {
     el.addEventListener('click', () => {
       if (el.dataset.action === 'start')      startGame();
-      else if (el.dataset.action === 'play-again') initGame();
+      else if (el.dataset.action === 'again') initGame();
     });
   });
 }
 
 function buildStartHTML() {
-  const t = theme();
   return `
     <div class="overlay-panel">
-      <h2>${t.title}</h2>
-      <p>${t.tagline}<br>Slide to the end of a row, or<br>knight-jump to a desert cell.</p>
+      <h2>🐿️ Squirrel</h2>
+      <p>Race your squirrels to the Acorn!<br>
+         Slide to the end of a row, or<br>
+         knight-jump to a desert cell.</p>
       <button class="btn" data-action="start">Start Game</button>
     </div>
   `;
 }
 
 function buildGameOverHTML() {
-  const w = GameState.winner;
-  const t = theme();
-  const center = t.centerSymbol ? `${t.centerSymbol} ` : '';
+  const w    = GameState.winner;
+  const name = PLAYER_NAME[w];
   return `
     <div class="overlay-panel">
-      <div class="winner-banner p${w}">Player ${w} wins!</div>
-      <p>${center}${t.goalName} reached!</p>
-      <button class="btn" data-action="play-again">Play Again</button>
+      <div class="winner-banner p${w}">${name} wins!</div>
+      <p>🌰 Acorn reached!</p>
+      <button class="btn" data-action="again">Play Again</button>
     </div>
   `;
 }
@@ -369,7 +326,6 @@ function buildGameOverHTML() {
 // ===== Entry Point =====
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('theme-btn').addEventListener('click', toggleTheme);
   document.getElementById('restart-btn').addEventListener('click', initGame);
   initGame();
 });
