@@ -258,7 +258,7 @@ body {
 
 .overlay-panel h2 {
   font-size: clamp(1.4rem, 5vw, 1.9rem);
-  margin-bottom: 1.4rem;
+  margin: 0.8rem 0 1.4rem;
 }
 
 .winner-banner {
