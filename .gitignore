@@ -1,1 +1,5 @@
+# Ignore IDE specific files
 .idx/
+
+# Ignore Firebase hosting files
+.firebase/
