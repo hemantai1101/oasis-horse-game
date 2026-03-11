@@ -37,7 +37,7 @@ const CENTER_SYMBOL = '🌰';
 // ===== Game State =====
 
 let GameState = {
-  phase: 'start',   // 'start' | 'playing' | 'game_over'
+  phase: 'start',   // 'start' | 'waiting' | 'joining' | 'playing' | 'game_over'
   board: {},
   horses: [],
   currentPlayer: 1,
@@ -45,7 +45,9 @@ let GameState = {
   validMoves: [],
   winner: null,
   totalMoves: 0,
+  forfeitReason: null,  // 'timeout' | null
 };
+
 
 // ===== Utility Functions =====
 
@@ -114,9 +116,15 @@ function getValidMoves(horse) {
 // ===== Game Flow =====
 
 function initGame(isRestart = false) {
+  // Exit any active multiplayer room first
+  if (typeof exitRoom === 'function' && MultiplayerState.roomCode) {
+    exitRoom();
+  }
   if (isRestart) {
     posthog.capture('game_restarted', { from_phase: GameState.phase, moves_played: GameState.totalMoves });
   }
+  AIState.enabled  = false;
+  AIState.thinking = false;
   GameState = {
     phase: 'start',
     board: {},
@@ -126,6 +134,7 @@ function initGame(isRestart = false) {
     validMoves: [],
     winner: null,
     totalMoves: 0,
+    forfeitReason: null,
   };
   render();
 }
@@ -139,6 +148,7 @@ function startGame() {
   GameState.validMoves = [];
   GameState.currentPlayer = 1;
   GameState.winner = null;
+  GameState.forfeitReason = null;
   placeInitialHorses();
   render();
 }
@@ -158,6 +168,14 @@ function placeInitialHorses() {
 
 function handleCellClick(col, row) {
   if (GameState.phase !== 'playing') return;
+
+  // Block clicks while the computer is deciding
+  if (AIState.thinking) return;
+  // Block clicks on the computer's turn
+  if (AIState.enabled && GameState.currentPlayer === AIState.playerNumber) return;
+
+  // Multiplayer: block interaction when it's not your turn
+  if (MultiplayerState.roomCode && GameState.currentPlayer !== MultiplayerState.myPlayerNumber) return;
 
   const clickedHorse = getHorseAt(col, row);
 
@@ -224,6 +242,7 @@ function executeMove(horse, move) {
       winner: PLAYER_NAME[GameState.winner],
       total_moves: GameState.totalMoves,
     });
+    if (MultiplayerState.roomCode) pushGameState(null);
     render();
     return;
   }
@@ -231,6 +250,8 @@ function executeMove(horse, move) {
   GameState.selectedHorse = null;
   GameState.validMoves = [];
   GameState.currentPlayer = GameState.currentPlayer === 1 ? 2 : 1;
+  if (MultiplayerState.roomCode) pushGameState(null);
+  scheduleAIMove();
   render();
 }
 
@@ -240,6 +261,7 @@ function render() {
   renderStatusBar();
   renderBoard();
   renderPhaseOverlay();
+  if (typeof updateTimerUI === 'function') updateTimerUI();
 }
 
 function renderStatusBar() {
@@ -249,6 +271,16 @@ function renderStatusBar() {
   const name = PLAYER_NAME[GameState.currentPlayer];
   const cls  = `turn-dot p${GameState.currentPlayer}`;
 
+  if (AIState.enabled && AIState.thinking) {
+    el.innerHTML = `<span class="${cls}"></span>Computer is thinking…`;
+    return;
+  }
+
+  // Show "(You)" label in multiplayer so players know which colour they are
+  const youLabel = MultiplayerState.roomCode
+    ? (GameState.currentPlayer === MultiplayerState.myPlayerNumber ? ' <em>(You)</em>' : '')
+    : '';
+
   if (GameState.selectedHorse) {
     const slideCount  = GameState.validMoves.filter(m => m.moveType === 'slide').length;
     const knightCount = GameState.validMoves.filter(m => m.moveType === 'knight').length;
@@ -256,9 +288,9 @@ function renderStatusBar() {
     if (slideCount)  parts.push(`${slideCount} slide`);
     if (knightCount) parts.push(`${knightCount} knight`);
     const summary = parts.length ? parts.join(', ') : 'no valid moves';
-    el.innerHTML = `<span class="${cls}"></span>${name}: ${summary} — tap a highlighted cell`;
+    el.innerHTML = `<span class="${cls}"></span>${name}${youLabel}: ${summary} — tap a highlighted cell`;
   } else {
-    el.innerHTML = `<span class="${cls}"></span>${name}'s turn — tap a squirrel to select`;
+    el.innerHTML = `<span class="${cls}"></span>${name}${youLabel}'s turn — tap a squirrel to select`;
   }
 }
 
@@ -309,6 +341,39 @@ function renderPhaseOverlay() {
   if (GameState.phase === 'start') {
     overlay.innerHTML = buildStartHTML();
     overlay.classList.remove('hidden');
+  } else if (GameState.phase === 'waiting') {
+    overlay.innerHTML = typeof buildWaitingHTML === 'function' ? buildWaitingHTML() : '<div class="overlay-panel"><p>Loading…</p></div>';
+    overlay.classList.remove('hidden');
+    // Wire copy button (special handler, not data-action)
+    const copyBtn = document.getElementById('copy-code-btn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(MultiplayerState.roomCode || '').then(() => {
+          copyBtn.textContent = '✓';
+          setTimeout(() => { copyBtn.textContent = '📋'; }, 1500);
+        }).catch(() => {
+          // fallback: select text
+          const codeEl = document.getElementById('room-code-text');
+          if (codeEl) {
+            const range = document.createRange();
+            range.selectNode(codeEl);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+          }
+        });
+      });
+    }
+  } else if (GameState.phase === 'joining') {
+    overlay.innerHTML = typeof buildJoinHTML === 'function' ? buildJoinHTML() : '<div class="overlay-panel"><p>Loading…</p></div>';
+    overlay.classList.remove('hidden');
+    setTimeout(() => {
+      const input = document.getElementById('room-code-input');
+      if (input) {
+        input.focus();
+        input.addEventListener('input', () => { input.value = input.value.toUpperCase(); });
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(input.value); });
+      }
+    }, 50);
   } else if (GameState.phase === 'game_over') {
     overlay.innerHTML = buildGameOverHTML();
     overlay.classList.remove('hidden');
@@ -318,29 +383,88 @@ function renderPhaseOverlay() {
   }
 
   overlay.querySelectorAll('[data-action]').forEach(el => {
-    el.addEventListener('click', () => {
-      if (el.dataset.action === 'start')      startGame();
-      else if (el.dataset.action === 'again') initGame();
-    });
+    el.addEventListener('click', () => handleOverlayAction(el.dataset.action));
   });
 }
 
+function handleOverlayAction(action) {
+  switch (action) {
+    case 'start':
+      startGame();
+      break;
+    case 'start-vs-computer':
+      startVsComputer();
+      break;
+    case 'again':
+      initGame();
+      break;
+    case 'again-vs-computer':
+      startVsComputer();
+      break;
+    case 'create-room':
+      if (typeof createRoom === 'function') createRoom();
+      break;
+    case 'join-room-prompt':
+      GameState.phase = 'joining';
+      render();
+      break;
+    case 'join-room': {
+      const input = document.getElementById('room-code-input');
+      if (input && typeof joinRoom === 'function') joinRoom(input.value);
+      break;
+    }
+    case 'cancel-room':
+      if (typeof exitRoom === 'function') exitRoom();
+      initGame();
+      break;
+  }
+}
+
 function buildStartHTML() {
+  const mpAvailable = window.db != null;
+  const mpButtons = mpAvailable ? `
+    <button class="btn btn-secondary" data-action="create-room">Create Online Room</button>
+    <button class="btn btn-secondary" data-action="join-room-prompt">Join a Room</button>
+  ` : '';
   return `
     <div class="overlay-panel">
       <h2>🐿️ Squirrel</h2>
-      <button class="btn" data-action="start">Start Game</button>
+      <div class="mode-buttons">
+        <button class="btn" data-action="start">Play Locally</button>
+        <button class="btn" data-action="start-vs-computer">vs Computer</button>
+        ${mpButtons}
+      </div>
     </div>
   `;
 }
 
 function buildGameOverHTML() {
   const w    = GameState.winner;
-  const name = PLAYER_NAME[w];
+  const isMP = MultiplayerState.roomCode !== null;
+
+  let winnerLabel;
+  if (isMP) {
+    winnerLabel = PLAYER_NAME[w];
+  } else if (AIState.enabled) {
+    winnerLabel = w === AIState.playerNumber ? 'Computer' : 'You';
+  } else {
+    winnerLabel = PLAYER_NAME[w];
+  }
+
+  let subtitle = '';
+  if (GameState.forfeitReason === 'timeout') {
+    const loser = w === 1 ? 2 : 1;
+    subtitle = `<p class="forfeit-reason">${PLAYER_NAME[loser]} ran out of time</p>`;
+  }
+
+  const btnAction = isMP ? 'cancel-room' : (AIState.enabled ? 'again-vs-computer' : 'again');
+  const btnLabel  = isMP ? 'Main Menu'   : 'Play Again';
+
   return `
     <div class="overlay-panel">
-      <div class="winner-banner p${w}">${name} wins!</div>
-      <button class="btn" data-action="again">Play Again</button>
+      <div class="winner-banner p${w}">${winnerLabel} wins!</div>
+      ${subtitle}
+      <button class="btn" data-action="${btnAction}">${btnLabel}</button>
     </div>
   `;
 }
@@ -365,4 +489,5 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target === e.currentTarget) hideRulesModal();
   });
   initGame();
+  if (typeof tryReconnect === 'function') tryReconnect();
 });
