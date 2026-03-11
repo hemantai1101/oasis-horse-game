@@ -67,7 +67,7 @@ async function createRoom() {
     MultiplayerState.myPlayerNumber = 1;
     MultiplayerState.myUid          = uid;
     MultiplayerState.status         = 'waiting';
-    sessionStorage.setItem('mp_room', JSON.stringify({ roomCode: code, playerNumber: 1, uid }));
+    localStorage.setItem('mp_room', JSON.stringify({ roomCode: code, playerNumber: 1, savedAt: Date.now() }));
     listenToRoom(code);
     GameState.phase = 'waiting';
     render();
@@ -107,7 +107,7 @@ async function joinRoom(rawCode) {
     MultiplayerState.myPlayerNumber = 2;
     MultiplayerState.myUid          = uid;
     MultiplayerState.status         = 'active';
-    sessionStorage.setItem('mp_room', JSON.stringify({ roomCode: code, playerNumber: 2, uid }));
+    localStorage.setItem('mp_room', JSON.stringify({ roomCode: code, playerNumber: 2, savedAt: Date.now() }));
 
     // Show "starting…" while P1 initialises the game state
     GameState.phase = 'waiting';
@@ -279,7 +279,7 @@ function exitRoom() {
     MultiplayerState.roomListener();
     MultiplayerState.roomListener = null;
   }
-  sessionStorage.removeItem('mp_room');
+  localStorage.removeItem('mp_room');
   Object.assign(MultiplayerState, {
     roomCode: null, myPlayerNumber: null, myUid: null,
     status: 'idle', timerSecondsLeft: 30,
@@ -345,39 +345,62 @@ function buildJoinHTML() {
 
 // ===== Session Reconnect =====
 
+function showReconnectingOverlay() {
+  const overlay = document.getElementById('overlay');
+  if (!overlay) return;
+  overlay.innerHTML = `<div class="overlay-panel"><p class="room-hint">Reconnecting…</p></div>`;
+  overlay.classList.remove('hidden');
+}
+
+function hideReconnectingOverlay() {
+  const overlay = document.getElementById('overlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
 function tryReconnect() {
   if (!window.db) return;
-  const saved = sessionStorage.getItem('mp_room');
+  const saved = localStorage.getItem('mp_room');
   if (!saved) return;
+  let parsed;
+  try { parsed = JSON.parse(saved); } catch { localStorage.removeItem('mp_room'); return; }
+
+  const { roomCode, playerNumber, savedAt } = parsed;
+
+  // TTL: abandon reconnect attempts for rooms older than 4 hours
+  if (!roomCode || Date.now() - (savedAt || 0) > 4 * 60 * 60 * 1000) {
+    localStorage.removeItem('mp_room');
+    return;
+  }
+
+  showReconnectingOverlay();
+
   getAuthenticatedUid().then(uid => {
-    try {
-      const { roomCode, playerNumber } = JSON.parse(saved);
-      window.db.ref(`rooms/${roomCode}`).get().then(snap => {
-        if (!snap.exists() || snap.val().status === 'done') {
-          sessionStorage.removeItem('mp_room');
-          return;
-        }
-        const room = snap.val();
-        // Verify this user is still a player in this room
-        if (uid !== room.p1uid && uid !== room.p2uid) {
-          sessionStorage.removeItem('mp_room');
-          return;
-        }
-        MultiplayerState.roomCode       = roomCode;
-        MultiplayerState.myPlayerNumber = playerNumber;
-        MultiplayerState.myUid          = uid;
-        MultiplayerState.status         = room.status;
-        if (room.status === 'waiting') {
-          GameState.phase = 'waiting';
-          render();
-        }
-        listenToRoom(roomCode);
-      });
-    } catch (e) {
-      sessionStorage.removeItem('mp_room');
-    }
+    return window.db.ref(`rooms/${roomCode}`).get().then(snap => {
+      hideReconnectingOverlay();
+      if (!snap.exists() || snap.val().status === 'done') {
+        localStorage.removeItem('mp_room');
+        return;
+      }
+      const room = snap.val();
+      // Verify this user is still a player in this room
+      if (uid !== room.p1uid && uid !== room.p2uid) {
+        localStorage.removeItem('mp_room');
+        return;
+      }
+      MultiplayerState.roomCode       = roomCode;
+      MultiplayerState.myPlayerNumber = playerNumber;
+      MultiplayerState.myUid          = uid;
+      MultiplayerState.status         = room.status;
+      if (room.status === 'waiting') {
+        GameState.phase = 'waiting';
+      }
+      // For active games: listenToRoom fires applyRemoteState which sets phase to 'playing'
+      render();
+      listenToRoom(roomCode);
+    });
   }).catch(e => {
     console.error('Reconnect failed:', e);
-    sessionStorage.removeItem('mp_room');
+    hideReconnectingOverlay();
+    localStorage.removeItem('mp_room');
   });
 }
