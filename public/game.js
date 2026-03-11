@@ -46,6 +46,7 @@ let GameState = {
   winner: null,
   totalMoves: 0,
   forfeitReason: null,  // 'timeout' | null
+  lastMove: null,       // { fromCol, fromRow, toCol, toRow } | null
 };
 
 
@@ -135,6 +136,7 @@ function initGame(isRestart = false) {
     winner: null,
     totalMoves: 0,
     forfeitReason: null,
+    lastMove: null,
   };
   render();
 }
@@ -219,6 +221,7 @@ function deselectHorse() {
 
 function executeMove(horse, move) {
   const fromCol = horse.col, fromRow = horse.row;
+  GameState.lastMove = { fromCol, fromRow, toCol: move.col, toRow: move.row };
   delete GameState.board[boardKey(horse.col, horse.row)];
   horse.col = move.col;
   horse.row = move.row;
@@ -310,6 +313,12 @@ function renderBoard() {
 
       const moveType = validMoveSet.get(boardKey(col, row));
       if (moveType) cell.classList.add('valid-move', `valid-${moveType}`);
+
+      const lm = GameState.lastMove;
+      if (lm) {
+        if (col === lm.fromCol && row === lm.fromRow) cell.classList.add('last-move-from');
+        if (col === lm.toCol   && row === lm.toRow)   cell.classList.add('last-move-to');
+      }
 
       const zone = getZone(col, row);
       if (zone === ZONE.OASIS && !getHorseAt(col, row)) {
@@ -482,6 +491,17 @@ function hideRulesModal() {
 // ===== Entry Point =====
 
 document.addEventListener('DOMContentLoaded', () => {
+  // ===== Theme =====
+  function setTheme(name) {
+    document.documentElement.setAttribute('data-theme', name);
+    localStorage.setItem('theme', name);
+    document.getElementById('theme-btn').textContent = name === 'dark' ? '☀️' : '🌙';
+  }
+  setTheme(localStorage.getItem('theme') || 'dark');
+  document.getElementById('theme-btn').addEventListener('click', () => {
+    setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
   document.getElementById('restart-btn').addEventListener('click', () => initGame(true));
   document.getElementById('rules-btn').addEventListener('click', showRulesModal);
   document.getElementById('rules-close').addEventListener('click', hideRulesModal);

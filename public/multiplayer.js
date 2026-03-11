@@ -168,6 +168,7 @@ function applyRemoteState(room) {
   GameState.forfeitReason  = g.forfeitReason || null;
   GameState.selectedHorse  = null;
   GameState.validMoves     = [];
+  GameState.lastMove       = g.lastMove || null;
 
   if (GameState.phase === 'playing') {
     if (GameState.currentPlayer !== prevPlayer || !MultiplayerState.timerInterval) {
@@ -198,6 +199,7 @@ function pushGameState(forfeitReason) {
     winner:        GameState.winner,
     forfeitReason: forfeitReason || null,
     horses:        GameState.horses.map(h => ({ id: h.id, owner: h.owner, col: h.col, row: h.row })),
+    lastMove:      GameState.lastMove || null,
     lastMoveAt:    Date.now(),
   };
   if (GameState.phase === 'game_over') {
