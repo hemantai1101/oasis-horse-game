@@ -37,7 +37,7 @@
               // Sub-case 3b: A player makes a move during the game.
               // - The 'game' data must have changed.
               // - It must be that player's turn.
-              (newData.child('game').hasChanged() && data.child('game/currentPlayer').val() === (data.child('p1uid').val() === auth.uid ? 1 : 2)) ||
+              (data.child('game').val() != newData.child('game').val() && data.child('game/currentPlayer').val() === (data.child('p1uid').val() === auth.uid ? 1 : 2)) ||
               
               // Sub-case 3c: The game is being ended (e.g., forfeit, timeout).
               // - The status is being changed from 'active' to 'done'.
