@@ -8,7 +8,7 @@ const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 let MultiplayerState = {
   roomCode:       null,   // null = local/offline mode
   myPlayerNumber: null,   // 1 or 2
-  myUid:          null,   // random session token
+  myUid:          null,   // Firebase Auth UID
   status:         'idle', // 'idle' | 'waiting' | 'active'
   timerInterval:  null,
   timerSecondsLeft: 30,
@@ -17,13 +17,18 @@ let MultiplayerState = {
 
 // ===== Session Identity =====
 
-function getOrCreateUid() {
-  let uid = sessionStorage.getItem('mp_uid');
-  if (!uid) {
-    uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    sessionStorage.setItem('mp_uid', uid);
+async function getAuthenticatedUid() {
+  if (!window.auth) throw new Error('Firebase Auth not initialized.');
+  if (window.auth.currentUser) {
+    return window.auth.currentUser.uid;
   }
-  return uid;
+  try {
+    const userCredential = await window.auth.signInAnonymously();
+    return userCredential.user.uid;
+  } catch (error) {
+    console.error("Anonymous sign-in failed:", error);
+    throw new Error('Could not sign in to multiplayer.');
+  }
 }
 
 // ===== Room Code Generation =====
@@ -50,8 +55,7 @@ async function findUniqueRoomCode() {
 async function createRoom() {
   if (!window.db) { alert('Multiplayer unavailable — Firebase not configured.'); return; }
   try {
-    const code = await findUniqueRoomCode();
-    const uid  = getOrCreateUid();
+    const [code, uid] = await Promise.all([findUniqueRoomCode(), getAuthenticatedUid()]);
     await window.db.ref(`rooms/${code}`).set({
       created: Date.now(),
       status:  'waiting',
@@ -87,6 +91,7 @@ async function joinRoom(rawCode) {
   if (joinBtn) { joinBtn.disabled = true; joinBtn.textContent = 'Joining…'; }
 
   try {
+    const uid = await getAuthenticatedUid();
     const snap = await window.db.ref(`rooms/${code}`).get();
     if (!snap.exists()) {
       showJoinError('Room not found. Check the code and try again.'); return;
@@ -96,7 +101,6 @@ async function joinRoom(rawCode) {
       showJoinError(room.status === 'active' ? 'Room is already full.' : 'Room is no longer active.'); return;
     }
 
-    const uid = getOrCreateUid();
     await window.db.ref(`rooms/${code}`).update({ p2uid: uid, status: 'active' });
 
     MultiplayerState.roomCode       = code;
@@ -343,25 +347,35 @@ function tryReconnect() {
   if (!window.db) return;
   const saved = sessionStorage.getItem('mp_room');
   if (!saved) return;
-  try {
-    const { roomCode, playerNumber, uid } = JSON.parse(saved);
-    window.db.ref(`rooms/${roomCode}`).get().then(snap => {
-      if (!snap.exists() || snap.val().status === 'done') {
-        sessionStorage.removeItem('mp_room');
-        return;
-      }
-      const room = snap.val();
-      MultiplayerState.roomCode       = roomCode;
-      MultiplayerState.myPlayerNumber = playerNumber;
-      MultiplayerState.myUid          = uid;
-      MultiplayerState.status         = room.status;
-      if (room.status === 'waiting') {
-        GameState.phase = 'waiting';
-        render();
-      }
-      listenToRoom(roomCode);
-    });
-  } catch (e) {
+  getAuthenticatedUid().then(uid => {
+    try {
+      const { roomCode, playerNumber } = JSON.parse(saved);
+      window.db.ref(`rooms/${roomCode}`).get().then(snap => {
+        if (!snap.exists() || snap.val().status === 'done') {
+          sessionStorage.removeItem('mp_room');
+          return;
+        }
+        const room = snap.val();
+        // Verify this user is still a player in this room
+        if (uid !== room.p1uid && uid !== room.p2uid) {
+          sessionStorage.removeItem('mp_room');
+          return;
+        }
+        MultiplayerState.roomCode       = roomCode;
+        MultiplayerState.myPlayerNumber = playerNumber;
+        MultiplayerState.myUid          = uid;
+        MultiplayerState.status         = room.status;
+        if (room.status === 'waiting') {
+          GameState.phase = 'waiting';
+          render();
+        }
+        listenToRoom(roomCode);
+      });
+    } catch (e) {
+      sessionStorage.removeItem('mp_room');
+    }
+  }).catch(e => {
+    console.error('Reconnect failed:', e);
     sessionStorage.removeItem('mp_room');
-  }
+  });
 }

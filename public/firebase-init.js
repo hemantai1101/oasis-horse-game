@@ -27,7 +27,9 @@ const firebaseConfig = {
 try {
   firebase.initializeApp(firebaseConfig);
   window.db = firebase.database();
+  window.auth = firebase.auth(); // Make auth available globally
 } catch (e) {
   console.warn('[Multiplayer] Firebase init failed — online play unavailable.', e);
   window.db = null;
+  window.auth = null;
 }

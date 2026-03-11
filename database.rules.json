@@ -1,11 +1,50 @@
 {
   "rules": {
-    ".read":  false,
+    ".read": false,
     ".write": false,
     "rooms": {
       "$roomCode": {
-        ".read": true,
-        ".write": "!data.exists() || data.child('status').val() !== 'done'"
+        // Allow a user to read a room if:
+        // 1. They are authenticated.
+        // 2. The room is waiting for a player (so they can join).
+        // 3. They are already a player in that room (p1 or p2).
+        ".read": "auth != null && (data.child('status').val() === 'waiting' || data.child('p1uid').val() === auth.uid || data.child('p2uid').val() === auth.uid)",
+        
+        // Allow a user to write to a room if they are authenticated AND one of the following cases is true:
+        ".write": "auth != null && (
+          // Case 1: CREATE room.
+          // - The room must not exist yet.
+          // - The new p1uid must be the user's uid.
+          // - The initial status must be 'waiting'.
+          (!data.exists() && newData.child('p1uid').val() === auth.uid && newData.child('status').val() === 'waiting') ||
+
+          // Case 2: JOIN room.
+          // - The room must currently be 'waiting'.
+          // - The user is setting themselves as p2.
+          // - The new status is 'active'.
+          (data.child('status').val() === 'waiting' && newData.child('p2uid').val() === auth.uid && newData.child('status').val() === 'active') ||
+
+          // Case 3: PLAY / END game.
+          // - The game must be 'active'.
+          // - The user must be one of the players.
+          (data.child('status').val() === 'active' && (data.child('p1uid').val() === auth.uid || data.child('p2uid').val() === auth.uid) &&
+            (
+              // Sub-case 3a: P1 initializes the game board after P2 joins.
+              // - The 'game' object is being created (it didn't exist before).
+              // - The user must be p1.
+              (newData.child('game').exists() && !data.child('game').exists() && data.child('p1uid').val() === auth.uid) ||
+
+              // Sub-case 3b: A player makes a move during the game.
+              // - The 'game' data must have changed.
+              // - It must be that player's turn.
+              (newData.child('game').hasChanged() && data.child('game/currentPlayer').val() === (data.child('p1uid').val() === auth.uid ? 1 : 2)) ||
+              
+              // Sub-case 3c: The game is being ended (e.g., forfeit, timeout).
+              // - The status is being changed from 'active' to 'done'.
+              (newData.child('status').val() === 'done' && data.child('status').val() === 'active')
+            )
+          )
+        )"
       }
     }
   }
