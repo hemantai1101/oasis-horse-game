@@ -15,13 +15,13 @@
 // =====================================================================
 
 const firebaseConfig = {
-  apiKey:            'REPLACE_WITH_YOUR_API_KEY',
-  authDomain:        'oasis-horse-game.firebaseapp.com',
-  databaseURL:       'https://oasis-horse-game-default-rtdb.firebaseio.com',
-  projectId:         'oasis-horse-game',
-  storageBucket:     'oasis-horse-game.appspot.com',
-  messagingSenderId: 'REPLACE_WITH_SENDER_ID',
-  appId:             'REPLACE_WITH_APP_ID',
+  apiKey:             "AIzaSyBaLXTn26-NiZ3q-hUDDayudvse8aepbu0",
+  authDomain:         "oasis-horse-game.firebaseapp.com",
+  databaseURL:        "https://oasis-horse-game-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:          "oasis-horse-game",
+  storageBucket:      "oasis-horse-game.firebasestorage.app",
+  messagingSenderId:  "676146386771",
+  appId:              "1:676146386771:web:0d630863f7af83733df3a6"
 };
 
 try {
