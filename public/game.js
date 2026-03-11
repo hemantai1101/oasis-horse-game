@@ -48,13 +48,6 @@ let GameState = {
   forfeitReason: null,  // 'timeout' | null
 };
 
-// Fallback so game works even if multiplayer.js fails to load
-if (typeof MultiplayerState === 'undefined') {
-  var MultiplayerState = {
-    roomCode: null, myPlayerNumber: null, myUid: null,
-    status: 'idle', timerInterval: null, timerSecondsLeft: 30, roomListener: null,
-  };
-}
 
 // ===== Utility Functions =====
 
