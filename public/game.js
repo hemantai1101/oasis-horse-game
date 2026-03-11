@@ -491,6 +491,17 @@ function hideRulesModal() {
 // ===== Entry Point =====
 
 document.addEventListener('DOMContentLoaded', () => {
+  // ===== Theme =====
+  function setTheme(name) {
+    document.documentElement.setAttribute('data-theme', name);
+    localStorage.setItem('theme', name);
+    document.getElementById('theme-btn').textContent = name === 'dark' ? '☀️' : '🌙';
+  }
+  setTheme(localStorage.getItem('theme') || 'dark');
+  document.getElementById('theme-btn').addEventListener('click', () => {
+    setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
   document.getElementById('restart-btn').addEventListener('click', () => initGame(true));
   document.getElementById('rules-btn').addEventListener('click', showRulesModal);
   document.getElementById('rules-close').addEventListener('click', hideRulesModal);

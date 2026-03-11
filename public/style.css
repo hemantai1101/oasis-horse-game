@@ -6,6 +6,7 @@
 }
 
 :root {
+  /* ===== Board zones ===== */
   --desert-color: #b89060;
   --desert-hover: #c8a070;
   --forest-color: #3a6020;
@@ -13,21 +14,105 @@
   --oasis-color:  #7a4a18;
   --oasis-glow:   #d4880a;
 
-  /* White squirrel (P1) and Black squirrel (P2) */
+  /* ===== Player pieces (identity — not themed) ===== */
   --p1-bg:   #f4f0e8;
   --p1-ring: rgba(0, 0, 0, 0.30);
   --p2-bg:   #1c1c1c;
   --p2-ring: rgba(255, 255, 255, 0.20);
 
-  --cell-size: min(calc((100vw - 52px) / 11), 58px);
-  --board-gap: 2px;
+  /* ===== Board layout ===== */
+  --cell-size:   min(calc((100vw - 52px) / 11), 58px);
+  --board-gap:   2px;
   --board-border: #7a5c2a;
 
-  --bg: #d4b880;
-  --header-bg: #3a2a10;
+  /* ===== Chrome ===== */
+  --bg:          #d4b880;
+  --header-bg:   #3a2a10;
   --header-text: #f5e6c0;
-  --status-bg: #2a1a06;
+  --status-bg:   #2a1a06;
   --status-text: #e8d5a0;
+
+  /* ===== Controls (header buttons, github badge) ===== */
+  --control-bg:       rgba(255,255,255,0.08);
+  --control-hover-bg: rgba(255,255,255,0.18);
+  --control-text:     #c8a96e;
+  --control-border:   rgba(200,169,110,0.4);
+
+  /* ===== Modals & overlays ===== */
+  --overlay-bg:       rgba(12,6,0,0.90);
+  --overlay-panel-bg: rgba(0,0,0,0.5);
+  --panel-bg:         #1e1206;
+  --panel-border:     #c8a96e;
+  --panel-heading:    #c8a96e;
+  --panel-text:       #f5e6c0;
+  --panel-subtext:    #d4c090;
+
+  /* ===== Text ===== */
+  --muted-text:       #6a5840;
+  --winner-p1-color:  #e8e0d0;
+
+  /* ===== Legend & Timer ===== */
+  --legend-border:    #1a0e00;
+  --timer-bar-bg:     rgba(0,0,0,0.25);
+  --timer-track-bg:   rgba(255,255,255,0.08);
+
+  /* ===== Inputs & room code ===== */
+  --input-bg:         rgba(0,0,0,0.4);
+  --input-border:     rgba(200,169,110,0.4);
+  --room-code-bg:     rgba(0,0,0,0.35);
+
+  /* ===== Secondary & ghost buttons ===== */
+  --btn-secondary-bg:       rgba(255,255,255,0.06);
+  --btn-secondary-bg-hover: rgba(255,255,255,0.12);
+  --btn-ghost-border:       rgba(255,255,255,0.15);
+  --btn-ghost-bg-hover:     rgba(255,255,255,0.06);
+}
+
+/* ===== Day Desert — Light Theme ===== */
+[data-theme="light"] {
+  --desert-color: #d4aa68;
+  --desert-hover: #dfb870;
+  --forest-color: #4a8028;
+  --forest-hover: #5a9030;
+  --oasis-color:  #8a5420;
+  --oasis-glow:   #e09010;
+
+  --board-border: #9a7040;
+
+  --bg:          #faf5e8;
+  --header-bg:   #e8d4a0;
+  --header-text: #2a1a06;
+  --status-bg:   #f5e8c8;
+  --status-text: #2a1a06;
+
+  --control-bg:       rgba(0,0,0,0.05);
+  --control-hover-bg: rgba(0,0,0,0.10);
+  --control-text:     #2a1a06;
+  --control-border:   rgba(60,30,5,0.30);
+
+  --overlay-bg:       rgba(245,235,210,0.94);
+  --overlay-panel-bg: rgba(255,255,255,0.85);
+  --panel-bg:         #ffffff;
+  --panel-border:     #a07030;
+  --panel-heading:    #7a4a18;
+  --panel-text:       #1a0e00;
+  --panel-subtext:    #4a3010;
+
+  --muted-text:      #7a5c30;
+  --winner-p1-color: #2a1a06;
+
+  --legend-border:  #c8a870;
+  --timer-bar-bg:   rgba(0,0,0,0.06);
+  --timer-track-bg: rgba(0,0,0,0.10);
+
+  --input-bg:     rgba(255,255,255,0.6);
+  --input-border: rgba(100,70,20,0.40);
+  --room-code-bg: rgba(255,255,255,0.45);
+
+  --btn-secondary-bg:       rgba(0,0,0,0.04);
+  --btn-secondary-bg-hover: rgba(0,0,0,0.08);
+  --btn-ghost-border:       rgba(0,0,0,0.15);
+  --btn-ghost-bg-hover:     rgba(0,0,0,0.04);
 }
 
 body {
@@ -67,9 +152,9 @@ body {
 }
 
 .ctrl-btn {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(200,169,110,0.4);
-  color: #c8a96e;
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  color: var(--control-text);
   padding: 0.28rem 0.7rem;
   border-radius: 16px;
   cursor: pointer;
@@ -83,8 +168,8 @@ body {
 }
 
 .ctrl-btn:hover {
-  background: rgba(255,255,255,0.18);
-  border-color: #c8a96e;
+  background: var(--control-hover-bg);
+  border-color: var(--control-text);
 }
 
 /* ===== Status Bar ===== */
@@ -256,12 +341,12 @@ body {
 #overlay {
   position: absolute;
   inset: 0;
-  background: rgba(12, 6, 0, 0.90);
+  background: var(--overlay-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #f5e6c0;
+  color: var(--panel-text);
   z-index: 20;
 }
 
@@ -270,9 +355,9 @@ body {
 .overlay-panel {
   text-align: center;
   padding: 2rem 2.6rem;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-panel-bg);
   border-radius: 14px;
-  border: 2px solid #c8a96e;
+  border: 2px solid var(--panel-border);
   max-width: 90%;
 }
 
@@ -287,9 +372,9 @@ body {
   margin: 0.8rem 0 1.2rem;
 }
 
-/* White winner: show on a dark background — keep text light */
-.winner-banner.p1 { color: #e8e0d0; }
-/* Black winner: use gold so it reads on the dark overlay */
+/* White winner: light text in dark mode, dark text in light mode */
+.winner-banner.p1 { color: var(--winner-p1-color); }
+/* Black winner: gold reads well on both dark and light panel backgrounds */
 .winner-banner.p2 { color: #e8c84a; }
 
 .btn {
@@ -318,7 +403,7 @@ body {
 #rules-modal {
   position: fixed;
   inset: 0;
-  background: rgba(12, 6, 0, 0.88);
+  background: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -329,20 +414,20 @@ body {
 #rules-modal.hidden { display: none; }
 
 .rules-panel {
-  background: #1e1206;
-  border: 2px solid #c8a96e;
+  background: var(--panel-bg);
+  border: 2px solid var(--panel-border);
   border-radius: 14px;
   padding: 1.8rem 2rem;
   max-width: 360px;
   width: 100%;
-  color: #f5e6c0;
+  color: var(--panel-text);
   position: relative;
 }
 
 .rules-panel h2 {
   font-size: 1.3rem;
   margin-bottom: 1.1rem;
-  color: #c8a96e;
+  color: var(--panel-heading);
   text-align: center;
 }
 
@@ -352,18 +437,18 @@ body {
   right: 0.8rem;
   background: none;
   border: none;
-  color: #9a8060;
+  color: var(--muted-text);
   font-size: 1rem;
   cursor: pointer;
   padding: 0.2rem 0.4rem;
   line-height: 1;
 }
-.rules-close:hover { color: #f5e6c0; }
+.rules-close:hover { color: var(--panel-text); }
 
 .rules-body p {
   font-size: 0.88rem;
   line-height: 1.65;
-  color: #d4c090;
+  color: var(--panel-subtext);
   margin-bottom: 0.85rem;
 }
 
@@ -379,7 +464,7 @@ body {
 .rules-body li {
   font-size: 0.86rem;
   line-height: 1.55;
-  color: #d4c090;
+  color: var(--panel-subtext);
   padding-left: 0.2rem;
 }
 
@@ -409,7 +494,7 @@ body {
 .rules-footer {
   margin-top: 1.2rem;
   padding-top: 1rem;
-  border-top: 1px solid rgba(200, 169, 110, 0.25);
+  border-top: 1px solid var(--panel-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -429,16 +514,16 @@ body {
   gap: 0.45rem;
   padding: 0.35rem 0.8rem;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(200, 169, 110, 0.35);
-  color: #c8a96e;
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  color: var(--control-text);
   font-size: 0.8rem;
   text-decoration: none;
   transition: background 0.15s, color 0.15s;
 }
 .github-badge:hover {
-  background: rgba(255, 255, 255, 0.13);
-  color: #f5e6c0;
+  background: var(--control-hover-bg);
+  color: var(--panel-text);
 }
 
 /* ===== Legend ===== */
@@ -450,7 +535,7 @@ body {
   border-radius: 0 0 8px 8px;
   width: 100%;
   justify-content: center;
-  border-top: 1px solid #1a0e00;
+  border-top: 1px solid var(--legend-border);
 }
 
 .legend-item {
@@ -458,7 +543,7 @@ body {
   align-items: center;
   gap: 0.4rem;
   font-size: clamp(0.65rem, 1.8vw, 0.75rem);
-  color: #9a8060;
+  color: var(--muted-text);
 }
 
 .legend-dot {
@@ -478,18 +563,18 @@ body {
   align-items: center;
   gap: 0.6rem;
   padding: 0.35rem 0.8rem;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--timer-bar-bg);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 0.78rem;
-  color: #6a5840;
+  color: var(--muted-text);
   transition: color 0.2s;
 }
-#timer-bar.my-turn { color: #c8a96e; }
+#timer-bar.my-turn { color: var(--control-text); }
 #timer-label { min-width: 100px; white-space: nowrap; }
 #timer-track {
   flex: 1;
   height: 5px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--timer-track-bg);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -516,23 +601,23 @@ body {
   width: 100%;
 }
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(200, 169, 110, 0.35);
-  color: #c8a96e;
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--control-border);
+  color: var(--control-text);
 }
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #f5e6c0;
+  background: var(--btn-secondary-bg-hover);
+  color: var(--panel-text);
 }
 .btn-ghost {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #6a5840;
+  border: 1px solid var(--btn-ghost-border);
+  color: var(--muted-text);
   font-size: 0.85rem;
 }
 .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #c8a96e;
+  background: var(--btn-ghost-bg-hover);
+  color: var(--control-text);
 }
 
 /* Room code display (waiting screen) */
@@ -540,15 +625,15 @@ body {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(200, 169, 110, 0.4);
+  background: var(--room-code-bg);
+  border: 1px solid var(--control-border);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   margin: 0.75rem 0;
 }
 .room-code-label {
   font-size: 0.65rem;
-  color: #6a5840;
+  color: var(--muted-text);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   white-space: nowrap;
@@ -558,7 +643,7 @@ body {
   font-size: 1.6rem;
   font-weight: bold;
   letter-spacing: 0.25em;
-  color: #f5e6c0;
+  color: var(--panel-text);
   flex: 1;
   text-align: center;
 }
@@ -566,7 +651,7 @@ body {
   font-family: 'Courier New', monospace;
   font-size: 1rem;
   letter-spacing: 0.15em;
-  color: #c8a96e;
+  color: var(--control-text);
 }
 .copy-btn {
   background: none;
@@ -580,7 +665,7 @@ body {
 .copy-btn:hover { opacity: 1; }
 .room-hint {
   font-size: 0.8rem;
-  color: #6a5840;
+  color: var(--muted-text);
   margin: 0 0 0.75rem;
 }
 
@@ -593,17 +678,17 @@ body {
   font-size: 1.8rem;
   letter-spacing: 0.3em;
   padding: 0.55rem 0.5rem;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(200, 169, 110, 0.4);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
   border-radius: 6px;
-  color: #f5e6c0;
+  color: var(--panel-text);
   text-transform: uppercase;
   box-sizing: border-box;
 }
 .room-code-input:focus {
   outline: none;
-  border-color: #c8a96e;
-  box-shadow: 0 0 0 2px rgba(200, 169, 110, 0.15);
+  border-color: var(--control-text);
+  box-shadow: 0 0 0 2px var(--input-border);
 }
 .join-error {
   display: block;
@@ -621,7 +706,7 @@ body {
 /* Forfeit reason under winner banner */
 .forfeit-reason {
   font-size: 0.82rem;
-  color: #8a7050;
+  color: var(--muted-text);
   margin: -0.2rem 0 0.5rem;
 }
 
