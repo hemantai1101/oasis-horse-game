@@ -69,7 +69,7 @@
 }
 
 /* ===== Day Desert — Light Theme ===== */
-[data-theme="light"] {
+html[data-theme="light"] {
   --desert-color: #d4aa68;
   --desert-hover: #dfb870;
   --forest-color: #4a8028;
