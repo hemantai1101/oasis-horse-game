@@ -123,6 +123,8 @@ function initGame(isRestart = false) {
   if (isRestart) {
     posthog.capture('game_restarted', { from_phase: GameState.phase, moves_played: GameState.totalMoves });
   }
+  AIState.enabled  = false;
+  AIState.thinking = false;
   GameState = {
     phase: 'start',
     board: {},
@@ -166,6 +168,11 @@ function placeInitialHorses() {
 
 function handleCellClick(col, row) {
   if (GameState.phase !== 'playing') return;
+
+  // Block clicks while the computer is deciding
+  if (AIState.thinking) return;
+  // Block clicks on the computer's turn
+  if (AIState.enabled && GameState.currentPlayer === AIState.playerNumber) return;
 
   // Multiplayer: block interaction when it's not your turn
   if (MultiplayerState.roomCode && GameState.currentPlayer !== MultiplayerState.myPlayerNumber) return;
@@ -244,6 +251,7 @@ function executeMove(horse, move) {
   GameState.validMoves = [];
   GameState.currentPlayer = GameState.currentPlayer === 1 ? 2 : 1;
   if (MultiplayerState.roomCode) pushGameState(null);
+  scheduleAIMove();
   render();
 }
 
@@ -262,6 +270,11 @@ function renderStatusBar() {
 
   const name = PLAYER_NAME[GameState.currentPlayer];
   const cls  = `turn-dot p${GameState.currentPlayer}`;
+
+  if (AIState.enabled && AIState.thinking) {
+    el.innerHTML = `<span class="${cls}"></span>Computer is thinking…`;
+    return;
+  }
 
   // Show "(You)" label in multiplayer so players know which colour they are
   const youLabel = MultiplayerState.roomCode
@@ -379,8 +392,14 @@ function handleOverlayAction(action) {
     case 'start':
       startGame();
       break;
+    case 'start-vs-computer':
+      startVsComputer();
+      break;
     case 'again':
       initGame();
+      break;
+    case 'again-vs-computer':
+      startVsComputer();
       break;
     case 'create-room':
       if (typeof createRoom === 'function') createRoom();
@@ -412,6 +431,7 @@ function buildStartHTML() {
       <h2>🐿️ Squirrel</h2>
       <div class="mode-buttons">
         <button class="btn" data-action="start">Play Locally</button>
+        <button class="btn" data-action="start-vs-computer">vs Computer</button>
         ${mpButtons}
       </div>
     </div>
@@ -419,9 +439,17 @@ function buildStartHTML() {
 }
 
 function buildGameOverHTML() {
-  const w      = GameState.winner;
-  const name   = PLAYER_NAME[w];
-  const isMP   = MultiplayerState.roomCode !== null;
+  const w    = GameState.winner;
+  const isMP = MultiplayerState.roomCode !== null;
+
+  let winnerLabel;
+  if (isMP) {
+    winnerLabel = PLAYER_NAME[w];
+  } else if (AIState.enabled) {
+    winnerLabel = w === AIState.playerNumber ? 'Computer' : 'You';
+  } else {
+    winnerLabel = PLAYER_NAME[w];
+  }
 
   let subtitle = '';
   if (GameState.forfeitReason === 'timeout') {
@@ -429,12 +457,12 @@ function buildGameOverHTML() {
     subtitle = `<p class="forfeit-reason">${PLAYER_NAME[loser]} ran out of time</p>`;
   }
 
-  const btnAction = isMP ? 'cancel-room' : 'again';
+  const btnAction = isMP ? 'cancel-room' : (AIState.enabled ? 'again-vs-computer' : 'again');
   const btnLabel  = isMP ? 'Main Menu'   : 'Play Again';
 
   return `
     <div class="overlay-panel">
-      <div class="winner-banner p${w}">${name} wins!</div>
+      <div class="winner-banner p${w}">${winnerLabel} wins!</div>
       ${subtitle}
       <button class="btn" data-action="${btnAction}">${btnLabel}</button>
     </div>
