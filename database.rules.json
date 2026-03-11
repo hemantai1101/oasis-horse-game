@@ -1,0 +1,13 @@
+{
+  "rules": {
+    ".read":  false,
+    ".write": false,
+    "rooms": {
+      "$roomCode": {
+        ".read": true,
+        // Allow writes only while the room is not yet finished
+        ".write": "!data.exists() || data.child('status').val() !== 'done'"
+      }
+    }
+  }
+}
