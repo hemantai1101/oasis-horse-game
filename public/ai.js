@@ -247,14 +247,32 @@ function evaluate(snap) {
     }
   }
 
-  // General positioning — closeness to center, but penalise forest clustering
+  // General positioning — closeness to center, but penalise off-axis forest clustering
   for (const h of snap.horses) {
-    const dist = Math.abs(h.col - CENTER.col) + Math.abs(h.row - CENTER.row);
+    const dist    = Math.abs(h.col - CENTER.col) + Math.abs(h.row - CENTER.row);
+    const onAxis  = h.col === CENTER.col || h.row === CENTER.row;
     const inForest = dist > 0 && dist <= 2;
     let pos = (10 - dist) * 8;
-    if (inForest) pos *= 0.3; // being crammed in forest without a backstop is low value
+    // Penalise only off-axis forest pieces — on-axis pieces near center are valuable
+    if (inForest && !onAxis) pos *= 0.3;
     if (h.owner === ai) score += pos;
     else                score -= pos;
+  }
+
+  // Fix 1: axis-alignment bonus — reward pieces on col=6 or row=6 before the attack fires
+  for (const h of snap.horses) {
+    if (h.col !== CENTER.col && h.row !== CENTER.row) continue;
+    if (h.owner === ai) score += 60;
+    else                score -= 60;
+  }
+
+  // Fix 2: preemptive backstop bonus — reward occupying a backstop cell independent of
+  // whether an aligned attacker exists yet (guides the AI to pre-load the backstop)
+  for (const h of snap.horses) {
+    const key = boardKey(h.col, h.row);
+    if (key !== '6,5' && key !== '6,7' && key !== '5,6' && key !== '7,6') continue;
+    if (h.owner === ai) score += 80;
+    else                score -= 80;
   }
 
   return score;
@@ -391,7 +409,7 @@ function getAIMove() {
 
   for (const candidate of moves) {
     const child = applyMove(snap, candidate.horseId, candidate.move);
-    const val = minimax(child, 3, -Infinity, +Infinity, false, startTime);
+    const val = minimax(child, 5, -Infinity, +Infinity, false, startTime);
     if (val > bestVal) {
       bestVal = val;
       bestMove = candidate;
