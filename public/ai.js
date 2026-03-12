@@ -526,7 +526,7 @@ function getAIMove() {
 
   // Iterative deepening: search depth 3, then 4, then 5.
   // Use the best result from the deepest completed search.
-  const timeBudget = 1500; // ms -- more generous than before
+  const timeBudget = 12000; // ms -- more generous than before
   const deadline = Date.now() + timeBudget;
   let bestVal = -Infinity;
   let bestMove = moves[0];
