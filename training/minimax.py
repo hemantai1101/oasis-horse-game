@@ -116,18 +116,40 @@ def evaluate_position(horses, board, ai_player):
                 continue
             score += 300 if h['owner'] == ai_player else -400
 
-    # General positioning — closeness to center, penalise forest clustering
+    # General positioning — closeness to center, penalise off-axis forest clustering
     cx, cy = CENTER
     for h in horses:
         dist = abs(h['col'] - cx) + abs(h['row'] - cy)
+        on_axis  = h['col'] == cx or h['row'] == cy
         in_forest = 0 < dist <= 2
         pos = (10 - dist) * 8
-        if in_forest:
+        # Only penalise off-axis pieces in the forest — on-axis pieces are valuable
+        if in_forest and not on_axis:
             pos *= 0.3
         if h['owner'] == ai_player:
             score += pos
         else:
             score -= pos
+
+    # Fix 1: axis-alignment bonus — reward pieces on col=6 or row=6
+    for h in horses:
+        if h['col'] != cx and h['row'] != cy:
+            continue
+        if h['owner'] == ai_player:
+            score += 60
+        else:
+            score -= 60
+
+    # Fix 2: preemptive backstop bonus — reward occupying a backstop cell
+    # even before an aligned attacker exists
+    backstop_cells = {(cx, cy-1), (cx, cy+1), (cx-1, cy), (cx+1, cy)}
+    for h in horses:
+        if (h['col'], h['row']) not in backstop_cells:
+            continue
+        if h['owner'] == ai_player:
+            score += 80
+        else:
+            score -= 80
 
     return score
 
@@ -243,7 +265,7 @@ def minimax_search(horses, board, depth, alpha, beta, maximizing, ai_player, dea
 
 # ===== Root Search =====
 
-def get_best_move(horses, board, player, depth=3, time_limit=1.0, randomise_equal=True):
+def get_best_move(horses, board, player, depth=5, time_limit=2.0, randomise_equal=True):
     """
     Returns (horse_id, move_dict) for the best move at the given depth.
     Mirrors getAIMove() in ai.js.

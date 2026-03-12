@@ -45,7 +45,7 @@ GAME_MIX = [
     ('depth3', 'random', 0.05),   # 5%  — P2 random
 ]
 
-DEPTH_MAP   = {'depth3': 3, 'depth2': 2, 'random': 0}
+DEPTH_MAP   = {'depth3': 5, 'depth2': 3, 'random': 0}  # depth3=5 matches improved browser AI
 MAX_MOVES   = 150   # safety cap — skip games that drag on too long
 
 
