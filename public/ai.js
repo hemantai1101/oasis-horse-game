@@ -1,5 +1,78 @@
 'use strict';
 
+// ===== Neural Network Evaluation =====
+//
+// When public/model/weights.json exists (produced by the training pipeline),
+// nnEvaluate() is used as the leaf evaluation function inside minimax instead
+// of the handcrafted evaluate().
+//
+// The model is a small MLP: Input(41) -> Dense(128, ReLU) -> Dense(64, ReLU) -> Dense(1, Tanh)
+// Output in [-1, +1]: positive = good for the player to move, negative = bad.
+//
+// If weights.json is absent, nnEvaluate() transparently falls back to evaluate().
+
+let NNWeights = null;
+
+// Set to true to force heuristic evaluation even when weights are loaded.
+// Useful for testing the new heuristic without retraining the NN.
+const FORCE_HEURISTIC = true;
+
+async function loadNNModel() {
+  try {
+    const resp = await fetch('model/weights.json');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    NNWeights = await resp.json();
+    console.log('[AI] Neural net weights loaded.');
+    if (FORCE_HEURISTIC) {
+      console.log('[AI] FORCE_HEURISTIC=true: using heuristic evaluation (NN ignored).');
+    } else {
+      console.log('[AI] Using NN evaluation.');
+    }
+  } catch (e) {
+    console.info('[AI] No weights.json found: using heuristic evaluation. ' +
+      '(Run the training pipeline to generate weights.)');
+  }
+}
+
+// Feature extraction -- mirrors state_to_features() in training/game.py
+function stateToFeatures(snap) {
+  const p1 = snap.horses.filter(h => h.owner === 1)
+    .sort((a, b) => a.col - b.col || a.row - b.row);
+  const p2 = snap.horses.filter(h => h.owner === 2)
+    .sort((a, b) => a.col - b.col || a.row - b.row);
+  const feats = [];
+  for (const h of [...p1, ...p2]) {
+    feats.push((h.col - 1) / 10);
+    feats.push((h.row - 1) / 10);
+  }
+  feats.push(snap.currentPlayer === 1 ? 0.0 : 1.0);
+  return feats;  // length 41 (10 pieces x 2 coords x 2 players + 1 player indicator)
+}
+
+// One fully-connected layer: output[i] = activation(b[i] + sum_j W[i][j] * x[j])
+function nnLayer(x, W, b, activation) {
+  return b.map((bi, i) => {
+    const z = bi + W[i].reduce((s, w, j) => s + w * x[j], 0);
+    return activation === 'relu' ? Math.max(0, z) : Math.tanh(z);
+  });
+}
+
+// Replace handcrafted evaluate() with neural net when weights are loaded.
+// Falls back to evaluate() if model is not yet loaded or FORCE_HEURISTIC is set.
+function nnEvaluate(snap) {
+  if (!NNWeights || FORCE_HEURISTIC) return evaluate(snap);
+
+  const x  = stateToFeatures(snap);
+  const h1 = nnLayer(x,  NNWeights.W1, NNWeights.b1, 'relu');   // 41 -> 128
+  const h2 = nnLayer(h1, NNWeights.W2, NNWeights.b2, 'relu');   // 128 -> 64
+  const out = nnLayer(h2, NNWeights.W3, NNWeights.b3, 'tanh');  // 64 -> 1
+
+  // out[0] in [-1, 1]: positive = good for the player to move.
+  // Minimax always maximises for AIState.playerNumber, so orient the sign:
+  const oriented = snap.currentPlayer === AIState.playerNumber ? out[0] : -out[0];
+  return oriented * 10000;  // scale to match heuristic score range
+}
+
 // ===== AI State + Entry Points (external API) =====
 
 const AIState = {
@@ -35,11 +108,6 @@ function scheduleAIMove() {
 // ===== Constants =====
 
 // The 4 backstop cells and the approach direction each enables.
-// A piece can ONLY stop at center if the cell immediately past center
-// (in the slide direction) is occupied — that's the "backstop".
-//   backstop: the cell that must be occupied
-//   filter:   which attacking pieces can exploit this backstop
-//             (piece must be in same row/col as center, on the correct side)
 const APPROACH_CONFIGS = [
   // Attacker above center (col=6, row<6), slides DOWN, needs backstop at (6,7)
   { bs: { col: 6, row: 7 }, filter: h => h.col === CENTER.col && h.row < CENTER.row },
@@ -53,7 +121,6 @@ const APPROACH_CONFIGS = [
 
 // ===== Pure State Helpers =====
 
-// Lightweight snapshot for minimax — never touches global GameState during search.
 function snapshotFromGameState() {
   const horses = GameState.horses.map(h => ({ id: h.id, owner: h.owner, col: h.col, row: h.row }));
   const board = {};
@@ -61,7 +128,6 @@ function snapshotFromGameState() {
   return { horses, board, currentPlayer: GameState.currentPlayer, lastMoveToCenter: false };
 }
 
-// Pure state transition. Returns a brand-new snapshot (immutable style).
 function applyMove(snap, horseId, move) {
   const horses = snap.horses.map(h =>
     h.id === horseId ? { ...h, col: move.col, row: move.row } : h
@@ -78,15 +144,13 @@ function applyMove(snap, horseId, move) {
 
 // ===== Pure Move Generators =====
 
-// Slide in one direction; returns the endpoint cell or null if the piece can't move.
 function pureSlideRay(horse, dc, dr, board) {
   let c = horse.col + dc, r = horse.row + dr;
   while (c >= 1 && c <= BOARD_SIZE && r >= 1 && r <= BOARD_SIZE && !board[boardKey(c, r)]) {
     c += dc; r += dr;
   }
-  // Step back to last valid cell
   c -= dc; r -= dr;
-  if (c === horse.col && r === horse.row) return null; // couldn't move at all
+  if (c === horse.col && r === horse.row) return null;
   return { col: c, row: r, moveType: 'slide' };
 }
 
@@ -99,7 +163,6 @@ function pureSlideMoves(horse, board) {
   return moves;
 }
 
-// Knight destinations must land in DESERT zone (same rule as game.js line 107).
 function pureKnightMoves(horse, board) {
   const moves = [];
   for (const [dc, dr] of KNIGHT_OFFSETS) {
@@ -118,7 +181,6 @@ function pureValidMoves(horse, board) {
 
 // ===== Threat Analysis =====
 
-// True if every cell strictly between fromHorse and CENTER (along the same row or col) is empty.
 function pathClear(fromHorse, board) {
   const dc = Math.sign(CENTER.col - fromHorse.col);
   const dr = Math.sign(CENTER.row - fromHorse.row);
@@ -131,66 +193,191 @@ function pathClear(fromHorse, board) {
   return true;
 }
 
-// For each of the 4 approach axes, compute a score contribution based on
-// who occupies the backstop cell and who has an aligned attacker with a clear path.
-function scoreBackstopControl(snap) {
-  const ai  = AIState.playerNumber;
-  const opp = 3 - ai;
-  let score = 0;
-
-  for (const { bs, filter } of APPROACH_CONFIGS) {
-    const occupant = snap.board[boardKey(bs.col, bs.row)];
-    if (!occupant) continue;
-
-    // Find any aligned attacker with a clear path on this axis
-    for (const h of snap.horses) {
-      if (!filter(h)) continue;
-      if (!pathClear(h, snap.board)) continue;
-
-      // A live attack exists. Score based on who attacks and who backstops.
-      if (h.owner === ai && occupant.owner === ai) {
-        score += 1500;  // AI has set up a winning position
-      } else if (h.owner === opp && occupant.owner === opp) {
-        score -= 2000;  // Opponent is about to win
-      } else if (h.owner === opp && occupant.owner === ai) {
-        score -= 800;   // AI piece is opponent's backstop — the critical mistake
-      } else if (h.owner === ai && occupant.owner === opp) {
-        score += 500;   // Opponent piece acts as AI's backstop (opportunistic)
-      }
-    }
-  }
-  return score;
+// Count how many moves a piece has (pure, no side effects)
+function countMobility(horse, board) {
+  return pureValidMoves(horse, board).length;
 }
 
-// ===== Evaluation =====
+// ===== EVALUATION (complete rewrite) =====
 
 function evaluate(snap) {
   const ai  = AIState.playerNumber;
   const opp = 3 - ai;
   let score = 0;
 
-  // Core: backstop-aware threat scoring
-  score += scoreBackstopControl(snap);
+  const aiHorses  = snap.horses.filter(h => h.owner === ai);
+  const oppHorses = snap.horses.filter(h => h.owner === opp);
 
-  // Near-win bonus: aligned + clear path, but backstop not yet in place
+  // ---------------------------------------------------------------
+  // 1. TERMINAL THREAT SCORING (highest priority)
+  //    A "ready attack" = attacker aligned on axis with clear path +
+  //    backstop cell occupied by a friendly piece.
+  //    A "near attack" = attacker aligned but backstop empty.
+  // ---------------------------------------------------------------
+
   for (const { bs, filter } of APPROACH_CONFIGS) {
-    if (snap.board[boardKey(bs.col, bs.row)]) continue; // already handled above
-    for (const h of snap.horses) {
-      if (!filter(h)) continue;
-      if (!pathClear(h, snap.board)) continue;
-      // Attacker is aligned and path is clear but no backstop yet
-      score += h.owner === ai ? 300 : -400;
+    const occupant = snap.board[boardKey(bs.col, bs.row)];
+
+    // --- Ready attacks (backstop occupied) ---
+    if (occupant) {
+      for (const h of snap.horses) {
+        if (!filter(h)) continue;
+        if (!pathClear(h, snap.board)) continue;
+
+        if (h.owner === ai && occupant.owner === ai) {
+          score += 3000;  // AI has a winning setup
+        } else if (h.owner === opp && occupant.owner === opp) {
+          score -= 4000;  // Opponent about to win -- massive penalty
+        } else if (h.owner === opp && occupant.owner === ai) {
+          score -= 1200;  // AI piece is being used as opponent's backstop
+        } else if (h.owner === ai && occupant.owner === opp) {
+          score += 800;   // Opponent piece acts as AI's backstop
+        }
+      }
+    } else {
+      // --- Near attacks (no backstop yet) ---
+      for (const h of snap.horses) {
+        if (!filter(h)) continue;
+        if (!pathClear(h, snap.board)) continue;
+        score += h.owner === ai ? 400 : -600;
+      }
     }
   }
 
-  // General positioning — closeness to center, but penalise forest clustering
+  // ---------------------------------------------------------------
+  // 2. PIECE DEVELOPMENT & POSITIONING
+  //    Reward advancing pieces out of corners towards the center axis.
+  //    Heavier weights than before so the AI actually moves pieces.
+  // ---------------------------------------------------------------
+
   for (const h of snap.horses) {
-    const dist = Math.abs(h.col - CENTER.col) + Math.abs(h.row - CENTER.row);
-    const inForest = dist > 0 && dist <= 2;
-    let pos = (10 - dist) * 8;
-    if (inForest) pos *= 0.3; // being crammed in forest without a backstop is low value
-    if (h.owner === ai) score += pos;
-    else                score -= pos;
+    const dist   = Math.abs(h.col - CENTER.col) + Math.abs(h.row - CENTER.row);
+    const onAxis = h.col === CENTER.col || h.row === CENTER.row;
+    const sign   = h.owner === ai ? 1 : -1;
+
+    // Base proximity score: being closer to center is good
+    // Max dist on 11x11 = 10, so (10-dist)*15 ranges from 0 to 150
+    score += sign * (10 - dist) * 15;
+
+    // Axis alignment bonus: being on col=6 or row=6 is strategically critical
+    if (onAxis) {
+      score += sign * 100;
+      // Extra bonus if close to center on axis (within 3 steps)
+      if (dist <= 3) {
+        score += sign * 80;
+      }
+    }
+
+    // Corner penalty: pieces stuck in starting corners are useless
+    const inCorner = (
+      (h.col <= 3 && h.row <= 3) ||
+      (h.col <= 3 && h.row >= 9) ||
+      (h.col >= 9 && h.row <= 3) ||
+      (h.col >= 9 && h.row >= 9)
+    );
+    if (inCorner) {
+      score -= sign * 60;
+    }
+
+    // Backstop cell occupation bonus (even without aligned attacker)
+    const key = boardKey(h.col, h.row);
+    if (key === '6,5' || key === '6,7' || key === '5,6' || key === '7,6') {
+      score += sign * 120;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // 3. MOBILITY
+  //    Having more available moves = more options = better position.
+  //    This also naturally encourages developing multiple pieces.
+  // ---------------------------------------------------------------
+
+  let aiMobility = 0, oppMobility = 0;
+  for (const h of aiHorses)  aiMobility  += countMobility(h, snap.board);
+  for (const h of oppHorses) oppMobility += countMobility(h, snap.board);
+  score += (aiMobility - oppMobility) * 8;
+
+  // ---------------------------------------------------------------
+  // 4. PIECE SPREAD / DEVELOPMENT DIVERSITY
+  //    Penalise having too many pieces clustered in one area.
+  //    Reward having pieces spread across the board.
+  // ---------------------------------------------------------------
+
+  // Count how many AI pieces have left their starting corners
+  let aiDeveloped = 0;
+  for (const h of aiHorses) {
+    const inStartCorner = (
+      (h.col >= 9 && h.row <= 3) ||  // TR corner (P2 start)
+      (h.col <= 3 && h.row >= 9)     // BL corner (P2 start)
+    );
+    if (!inStartCorner) aiDeveloped++;
+  }
+  // Reward developing pieces (each piece that leaves the corner)
+  score += aiDeveloped * 25;
+
+  let oppDeveloped = 0;
+  for (const h of oppHorses) {
+    const inStartCorner = (
+      (h.col <= 3 && h.row <= 3) ||  // TL corner (P1 start)
+      (h.col >= 9 && h.row >= 9)     // BR corner (P1 start)
+    );
+    if (!inStartCorner) oppDeveloped++;
+  }
+  score -= oppDeveloped * 25;
+
+  // ---------------------------------------------------------------
+  // 5. AXIS CONTROL
+  //    Count pieces on the center row and column (col=6 or row=6).
+  //    More pieces on axis = more attack options.
+  // ---------------------------------------------------------------
+
+  let aiOnAxis = 0, oppOnAxis = 0;
+  for (const h of aiHorses) {
+    if (h.col === CENTER.col || h.row === CENTER.row) aiOnAxis++;
+  }
+  for (const h of oppHorses) {
+    if (h.col === CENTER.col || h.row === CENTER.row) oppOnAxis++;
+  }
+  score += (aiOnAxis - oppOnAxis) * 40;
+
+  // ---------------------------------------------------------------
+  // 6. BLOCKING AWARENESS
+  //    If opponent has an aligned attacker with clear path, any AI
+  //    piece that could move into that path to block gets a bonus.
+  // ---------------------------------------------------------------
+
+  for (const { filter } of APPROACH_CONFIGS) {
+    for (const h of oppHorses) {
+      if (!filter(h)) continue;
+      if (!pathClear(h, snap.board)) continue;
+
+      // Opponent has a dangerous alignment. Check if AI can block next turn.
+      const dc = Math.sign(CENTER.col - h.col);
+      const dr = Math.sign(CENTER.row - h.row);
+      let c = h.col + dc, r = h.row + dr;
+      const pathCells = [];
+      while (!(c === CENTER.col && r === CENTER.row)) {
+        pathCells.push({ col: c, row: r });
+        c += dc; r += dr;
+      }
+
+      // Check if any AI piece can reach a blocking position
+      let canBlock = false;
+      for (const ah of aiHorses) {
+        const moves = pureValidMoves(ah, snap.board);
+        for (const m of moves) {
+          if (pathCells.some(pc => pc.col === m.col && pc.row === m.row)) {
+            canBlock = true;
+            break;
+          }
+        }
+        if (canBlock) break;
+      }
+      // If we can't block, extra penalty
+      if (!canBlock) {
+        score -= 500;
+      }
+    }
   }
 
   return score;
@@ -198,10 +385,9 @@ function evaluate(snap) {
 
 // ===== Move Ordering =====
 
-// Returns [{horseId, move}] for the current player, sorted for good alpha-beta cutoffs.
 function generateOrderedMoves(snap) {
-  const ai  = AIState.playerNumber;
   const player = snap.currentPlayer;
+  const opp = 3 - player;
   const moves = [];
 
   for (const h of snap.horses) {
@@ -211,40 +397,57 @@ function generateOrderedMoves(snap) {
     }
   }
 
-  // Priority scoring for ordering (not the same as evaluate — just for ordering)
   moves.forEach(m => {
-    const { move } = m;
+    const { move, horseId } = m;
     let pri = 0;
+
     // 1. Immediate win
-    if (move.col === CENTER.col && move.row === CENTER.row) { pri = 1e9; }
-    else {
+    if (move.col === CENTER.col && move.row === CENTER.row) {
+      pri = 1e9;
+    } else {
       // 2. Creating a winning backstop for an aligned friendly attacker
       for (const { bs, filter } of APPROACH_CONFIGS) {
         if (move.col === bs.col && move.row === bs.row) {
-          // Does a friendly attacker exist with a clear path?
           for (const h of snap.horses) {
             if (h.owner !== player || !filter(h)) continue;
             if (pathClear(h, snap.board)) { pri = Math.max(pri, 8000); }
           }
         }
       }
-      // 3. Blocking opponent's aligned attacker
-      const opp = 3 - player;
+
+      // 3. Moving an aligned attacker with clear path (the attack itself)
+      for (const { bs, filter } of APPROACH_CONFIGS) {
+        const horse = snap.horses.find(h => h.id === horseId);
+        if (!horse || !filter(horse)) continue;
+        if (!pathClear(horse, snap.board)) continue;
+        const occupant = snap.board[boardKey(bs.col, bs.row)];
+        if (occupant && occupant.owner === player) {
+          pri = Math.max(pri, 7000);
+        }
+      }
+
+      // 4. Blocking opponent's aligned attacker
       for (const { filter } of APPROACH_CONFIGS) {
         for (const h of snap.horses) {
           if (h.owner !== opp || !filter(h)) continue;
           if (!pathClear(h, snap.board)) continue;
-          // Blocking moves: placing on the path between attacker and center
           const dc = Math.sign(CENTER.col - h.col);
           const dr = Math.sign(CENTER.row - h.row);
           let c = h.col + dc, r = h.row + dr;
           while (!(c === CENTER.col && r === CENTER.row)) {
-            if (move.col === c && move.row === r) pri = Math.max(pri, 5000);
+            if (move.col === c && move.row === r) pri = Math.max(pri, 6000);
             c += dc; r += dr;
           }
         }
       }
-      // 4. Fallback: proximity to center
+
+      // 5. Moving to axis (col=6 or row=6)
+      if (pri === 0 && (move.col === CENTER.col || move.row === CENTER.row)) {
+        const dist = Math.abs(move.col - CENTER.col) + Math.abs(move.row - CENTER.row);
+        pri = Math.max(pri, 100 + (10 - dist) * 10);
+      }
+
+      // 6. Fallback: proximity to center
       if (pri === 0) {
         const dist = Math.abs(move.col - CENTER.col) + Math.abs(move.row - CENTER.row);
         pri = 10 - dist;
@@ -257,31 +460,34 @@ function generateOrderedMoves(snap) {
   return moves;
 }
 
-// ===== Minimax =====
+// ===== Minimax with Iterative Deepening =====
 
-function minimax(snap, depth, alpha, beta, maximizing, startTime) {
-  // Time guard — avoids going over budget; returns bound rather than ±Infinity
-  // so an incomplete subtree doesn't poison the parent's choice.
-  if (Date.now() - startTime > 750) {
+let nodeCount = 0;
+
+function minimax(snap, depth, alpha, beta, maximizing, deadline) {
+  nodeCount++;
+
+  // Time guard
+  if (nodeCount % 256 === 0 && Date.now() > deadline) {
     return maximizing ? alpha : beta;
   }
 
   // Terminal: the player who just moved landed on center
   if (snap.lastMoveToCenter) {
-    const winner = 3 - snap.currentPlayer; // currentPlayer already flipped in applyMove
-    return winner === AIState.playerNumber ? +10000 : -10000;
+    const winner = 3 - snap.currentPlayer;
+    return winner === AIState.playerNumber ? +50000 : -50000;
   }
 
-  if (depth === 0) return evaluate(snap);
+  if (depth === 0) return nnEvaluate(snap);
 
   const moves = generateOrderedMoves(snap);
-  if (!moves.length) return evaluate(snap);
+  if (!moves.length) return nnEvaluate(snap);
 
   if (maximizing) {
     let best = -Infinity;
     for (const { horseId, move } of moves) {
       const child = applyMove(snap, horseId, move);
-      const val = minimax(child, depth - 1, alpha, beta, false, startTime);
+      const val = minimax(child, depth - 1, alpha, beta, false, deadline);
       if (val > best) best = val;
       if (val > alpha) alpha = val;
       if (alpha >= beta) break;
@@ -291,7 +497,7 @@ function minimax(snap, depth, alpha, beta, maximizing, startTime) {
     let best = +Infinity;
     for (const { horseId, move } of moves) {
       const child = applyMove(snap, horseId, move);
-      const val = minimax(child, depth - 1, alpha, beta, true, startTime);
+      const val = minimax(child, depth - 1, alpha, beta, true, deadline);
       if (val < best) best = val;
       if (val < beta) beta = val;
       if (beta <= alpha) break;
@@ -302,8 +508,6 @@ function minimax(snap, depth, alpha, beta, maximizing, startTime) {
 
 // ===== Root Search =====
 
-// Maps a snapshot horseId back to the actual GameState horse reference that
-// executeMove() needs (it mutates the horse object in place).
 function resolveToGameObjects({ horseId, move }) {
   const horse = GameState.horses.find(h => h.id === horseId);
   return horse ? { horse, move } : null;
@@ -311,8 +515,6 @@ function resolveToGameObjects({ horseId, move }) {
 
 function getAIMove() {
   const snap = snapshotFromGameState();
-  const startTime = Date.now();
-
   const moves = generateOrderedMoves(snap);
   if (!moves.length) return null;
 
@@ -322,16 +524,39 @@ function getAIMove() {
     return resolveToGameObjects(winMove);
   }
 
+  // Iterative deepening: search depth 3, then 4, then 5.
+  // Use the best result from the deepest completed search.
+  const timeBudget = 1500; // ms -- more generous than before
+  const deadline = Date.now() + timeBudget;
   let bestVal = -Infinity;
   let bestMove = moves[0];
 
-  for (const candidate of moves) {
-    const child = applyMove(snap, candidate.horseId, candidate.move);
-    const val = minimax(child, 3, -Infinity, +Infinity, false, startTime);
-    if (val > bestVal) {
-      bestVal = val;
-      bestMove = candidate;
+  for (let depth = 3; depth <= 6; depth++) {
+    if (Date.now() > deadline) break;
+
+    nodeCount = 0;
+    let depthBestVal = -Infinity;
+    let depthBestMove = moves[0];
+    let completed = true;
+
+    for (const candidate of moves) {
+      if (Date.now() > deadline) { completed = false; break; }
+      const child = applyMove(snap, candidate.horseId, candidate.move);
+      const val = minimax(child, depth - 1, -Infinity, +Infinity, false, deadline);
+      if (val > depthBestVal) {
+        depthBestVal = val;
+        depthBestMove = candidate;
+      }
     }
+
+    // Only use this depth's result if we completed all moves
+    if (completed || depthBestVal > bestVal) {
+      bestVal = depthBestVal;
+      bestMove = depthBestMove;
+    }
+
+    console.log(`[AI] depth=${depth} best=${depthBestVal.toFixed(0)} nodes=${nodeCount} ` +
+      `move=${bestMove.horseId} -> (${bestMove.move.col},${bestMove.move.row})`);
   }
 
   return resolveToGameObjects(bestMove);
