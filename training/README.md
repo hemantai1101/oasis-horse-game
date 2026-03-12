@@ -1,0 +1,226 @@
+# Squirrel Oasis — Training Pipeline
+
+This folder contains everything needed to train a neural network that improves the
+browser AI. The trained weights (`public/model/weights.json`) replace the handcrafted
+evaluation heuristics in `public/ai.js` — the minimax search structure stays intact.
+
+---
+
+## Prerequisites
+
+**Python 3.9 or newer** is required. Install the two dependencies:
+
+```bash
+pip install torch numpy
+```
+
+No GPU is needed. The model is tiny (~13,000 parameters) and trains in minutes on any laptop.
+
+---
+
+## Quickstart
+
+Run these three commands from the **repository root** (or adjust paths accordingly):
+
+```bash
+# 1. Generate self-play games  (~10–30 min for 10,000 games)
+python training/generate_games.py
+
+# 2. Train the neural network  (~1–5 min)
+python training/train.py
+
+# 3. Export weights to the browser  (seconds)
+python training/export_weights.py
+```
+
+Then commit and push `public/model/weights.json`:
+
+```bash
+git add public/model/weights.json
+git commit -m "Add trained NN weights (stage 1)"
+git push
+```
+
+Open the game in a browser. The AI will automatically load the neural net weights.
+Check the browser DevTools console for: `[AI] Neural net weights loaded.`
+
+---
+
+## Smoke Test (fast, before running the full pipeline)
+
+```bash
+python training/generate_games.py --n-games 100
+# Should produce ~5,000 lines in training/data/games.jsonl
+
+python training/train.py
+# Should show decreasing loss over 30 epochs
+
+python training/export_weights.py
+# Should produce public/model/weights.json (~100 KB)
+```
+
+---
+
+## File Overview
+
+| File | Purpose |
+|------|---------|
+| `game.py` | Python port of `public/game.js` — board, moves, zones |
+| `minimax.py` | Python port of `public/ai.js` — backstop evaluation, minimax search |
+| `generate_games.py` | Self-play runner; writes `data/games.jsonl` |
+| `train.py` | PyTorch training loop; writes `models/model.pt` |
+| `export_weights.py` | Converts `model.pt` → `../public/model/weights.json` |
+| `requirements.txt` | Python dependencies (torch, numpy) |
+| `data/` | Generated game records (gitignored — create by running generate_games.py) |
+| `models/` | Saved model checkpoints (gitignored) |
+
+---
+
+## State Representation
+
+Each board position is encoded as **21 floating-point numbers**:
+
+```
+Positions [0–9]:   P1 piece positions, sorted by (col, row)
+                   5 pieces × 2 values = (col-1)/10, (row-1)/10  ∈ [0, 1]
+Positions [10–19]: P2 piece positions, same format
+Position [20]:     Current player: 0.0 = P1's turn, 1.0 = P2's turn
+```
+
+Pieces are sorted so the same board state always produces the same feature vector,
+regardless of the order moves were made in history.
+
+---
+
+## Training Target
+
+For every position in a recorded game:
+- **Label +1.0** if the player whose turn it was eventually **won**
+- **Label −1.0** if they eventually **lost**
+
+This is a *value function* — it estimates "how good is this position for the player to move?"
+It replaces the handcrafted `evaluate()` in the minimax search as the leaf evaluation.
+
+---
+
+## Model Architecture
+
+```
+Input (21) → Linear(128) + ReLU → Linear(64) + ReLU → Linear(1) + Tanh
+```
+
+Output is in **[−1, +1]**. Positive = good for the player to move; negative = bad.
+
+---
+
+## Data Generation Mix
+
+Games are played between minimax AIs of varying strength to create diverse data:
+
+| Proportion | P1 | P2 | Purpose |
+|-----------|----|----|---------|
+| 60% | depth-3 | depth-3 | High-quality expert games |
+| 15% | depth-2 | depth-3 | P1 makes occasional mistakes |
+| 15% | depth-3 | depth-2 | P2 makes occasional mistakes |
+| 5%  | random  | depth-3 | Diverse opening positions |
+| 5%  | depth-3 | random  | Diverse opening positions |
+
+Each game is also augmented with a 180° board rotation (preserves player-corner
+assignments: TL↔BR and TR↔BL stay with the same owner), doubling the dataset size.
+
+---
+
+## Iteration Roadmap
+
+The training pipeline is designed to improve in stages. Each stage produces a
+stronger AI than the previous one.
+
+### Stage 1 — Supervised Learning from Minimax (this stage)
+
+**Data source:** Python minimax AI (depth 3) plays against itself.
+**Constraint:** The neural net is bounded by the minimax teacher's quality.
+**Practical gain:** NN inference is ~1000× faster than minimax search, so the same
+                    NN can be used inside a *deeper* minimax search tree.
+
+```bash
+python training/generate_games.py --n-games 10000
+python training/train.py
+python training/export_weights.py
+```
+
+**Expected strength:** Roughly equivalent to depth-3 minimax, but evaluations are instant.
+
+---
+
+### Stage 2 — Deeper Minimax with NN Evaluation
+
+**No retraining needed.** Increase the search depth in `public/ai.js` from 3 to 5 or 6:
+
+```js
+// In getAIMove(), change:
+const val = minimax(child, 3, ...   // ← change to 5 or 6
+```
+
+The NN evaluates leaf nodes in < 1 ms instead of the heuristic's microseconds, so
+the time budget (750 ms) is still respected at greater depths.
+
+**Expected strength:** Noticeably stronger than stage 1 — the AI "sees further ahead."
+
+---
+
+### Stage 3 — Self-Play Training (break the minimax ceiling)
+
+**This is where the AI can surpass the minimax teacher.**
+
+Instead of using the Python minimax to generate games, use the *trained neural net*
+guided by Monte Carlo Tree Search (MCTS). The net plays against itself, discovers
+strategies the minimax never found, and trains on those games.
+
+Concretely: update `generate_games.py` to import the trained model and replace
+`get_best_move()` calls with MCTS rollouts guided by the NN value function.
+
+```bash
+# After stage 1 is complete:
+python training/generate_games_mcts.py --n-games 20000  # (stage 3 script, not yet written)
+python training/train.py --data data/games_mcts.jsonl
+python training/export_weights.py
+```
+
+Re-run with the new model as the data generator. Iterate until strength plateaus.
+
+**Expected strength:** Potentially much stronger than any fixed-depth minimax search.
+
+---
+
+### Stage 4 — AlphaZero-Lite (continuous self-improvement)
+
+Automate the stage-3 loop:
+
+1. Generate N games using current model + MCTS
+2. Train new model on those games
+3. Evaluate new model vs old model (acceptance test: win rate > 55%)
+4. Replace old model with new model if accepted
+5. Go to step 1
+
+Each iteration, the data generator (the model itself) improves, creating a
+positive feedback loop. This is the same principle as AlphaGo Zero and AlphaZero.
+
+**Expected strength:** Converges to near-optimal play for the game tree complexity.
+
+---
+
+## Troubleshooting
+
+**`FileNotFoundError: data/games.jsonl not found`**
+→ Run `python training/generate_games.py` first.
+
+**`FileNotFoundError: models/model.pt not found`**
+→ Run `python training/train.py` first.
+
+**`[AI] No weights.json found — using heuristic evaluation.`** in browser console
+→ Commit and serve `public/model/weights.json`. If running locally, serve via HTTP
+  (not file://) — fetch() requires HTTP. Use `python -m http.server 8080` in `public/`.
+
+**Training loss not decreasing**
+→ Try more data: `--n-games 50000`. The model is small enough that more data helps more
+  than more epochs. Also try `--epochs 50 --lr 5e-4`.

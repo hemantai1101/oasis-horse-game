@@ -1,5 +1,69 @@
 'use strict';
 
+// ===== Neural Network Evaluation =====
+//
+// When public/model/weights.json exists (produced by the training pipeline),
+// nnEvaluate() is used as the leaf evaluation function inside minimax instead
+// of the handcrafted evaluate().
+//
+// The model is a small MLP: Input(21) → Dense(128, ReLU) → Dense(64, ReLU) → Dense(1, Tanh)
+// Output in [-1, +1]: positive = good for the player to move, negative = bad.
+//
+// If weights.json is absent, nnEvaluate() transparently falls back to evaluate().
+
+let NNWeights = null;
+
+async function loadNNModel() {
+  try {
+    const resp = await fetch('model/weights.json');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    NNWeights = await resp.json();
+    console.log('[AI] Neural net weights loaded — using NN evaluation.');
+  } catch (e) {
+    console.info('[AI] No weights.json found — using heuristic evaluation. ' +
+                 '(Run the training pipeline to generate weights.)');
+  }
+}
+
+// Feature extraction — mirrors state_to_features() in training/game.py
+function stateToFeatures(snap) {
+  const p1 = snap.horses.filter(h => h.owner === 1)
+    .sort((a, b) => a.col - b.col || a.row - b.row);
+  const p2 = snap.horses.filter(h => h.owner === 2)
+    .sort((a, b) => a.col - b.col || a.row - b.row);
+  const feats = [];
+  for (const h of [...p1, ...p2]) {
+    feats.push((h.col - 1) / 10);
+    feats.push((h.row - 1) / 10);
+  }
+  feats.push(snap.currentPlayer === 1 ? 0.0 : 1.0);
+  return feats;  // length 21
+}
+
+// One fully-connected layer: output[i] = ReLU(b[i] + sum_j W[i][j] * x[j])
+function nnLayer(x, W, b, activation) {
+  return b.map((bi, i) => {
+    const z = bi + W[i].reduce((s, w, j) => s + w * x[j], 0);
+    return activation === 'relu' ? Math.max(0, z) : Math.tanh(z);
+  });
+}
+
+// Replace handcrafted evaluate() with neural net when weights are loaded.
+// Falls back to evaluate() if model is not yet loaded.
+function nnEvaluate(snap) {
+  if (!NNWeights) return evaluate(snap);
+
+  const x  = stateToFeatures(snap);
+  const h1 = nnLayer(x,  NNWeights.W1, NNWeights.b1, 'relu');   // 21 → 128
+  const h2 = nnLayer(h1, NNWeights.W2, NNWeights.b2, 'relu');   // 128 → 64
+  const out = nnLayer(h2, NNWeights.W3, NNWeights.b3, 'tanh');  // 64 → 1
+
+  // out[0] ∈ [-1, 1]: positive = good for the player to move.
+  // Minimax always maximises for AIState.playerNumber, so orient the sign:
+  const oriented = snap.currentPlayer === AIState.playerNumber ? out[0] : -out[0];
+  return oriented * 10000;  // scale to match heuristic score range
+}
+
 // ===== AI State + Entry Points (external API) =====
 
 const AIState = {
@@ -272,10 +336,10 @@ function minimax(snap, depth, alpha, beta, maximizing, startTime) {
     return winner === AIState.playerNumber ? +10000 : -10000;
   }
 
-  if (depth === 0) return evaluate(snap);
+  if (depth === 0) return nnEvaluate(snap);
 
   const moves = generateOrderedMoves(snap);
-  if (!moves.length) return evaluate(snap);
+  if (!moves.length) return nnEvaluate(snap);
 
   if (maximizing) {
     let best = -Infinity;
