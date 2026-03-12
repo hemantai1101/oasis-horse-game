@@ -37,7 +37,7 @@ function stateToFeatures(snap) {
     feats.push((h.row - 1) / 10);
   }
   feats.push(snap.currentPlayer === 1 ? 0.0 : 1.0);
-  return feats;  // length 21
+  return feats;  // length 41 (10 pieces × 2 coords × 2 players + 1 player indicator)
 }
 
 // One fully-connected layer: output[i] = ReLU(b[i] + sum_j W[i][j] * x[j])
@@ -54,7 +54,7 @@ function nnEvaluate(snap) {
   if (!NNWeights) return evaluate(snap);
 
   const x  = stateToFeatures(snap);
-  const h1 = nnLayer(x,  NNWeights.W1, NNWeights.b1, 'relu');   // 21 → 128
+  const h1 = nnLayer(x,  NNWeights.W1, NNWeights.b1, 'relu');   // 41 → 128
   const h2 = nnLayer(h1, NNWeights.W2, NNWeights.b2, 'relu');   // 128 → 64
   const out = nnLayer(h2, NNWeights.W3, NNWeights.b3, 'tanh');  // 64 → 1
 
