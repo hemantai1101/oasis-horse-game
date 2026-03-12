@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Firebase Serve",
+      "runtimeExecutable": "firebase",
+      "runtimeArgs": ["serve", "--port", "5000"],
+      "port": 5000
+    },
+    {
+      "name": "Python HTTP Server",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "public"],
+      "port": 8080
+    }
+  ]
+}
