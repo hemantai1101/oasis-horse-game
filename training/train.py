@@ -36,7 +36,7 @@ class ValueNet(nn.Module):
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(21, 128),
+            nn.Linear(41, 128),
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),

@@ -18,6 +18,7 @@ Usage:
 
 import argparse
 import json
+import multiprocessing
 import os
 import random
 import sys
@@ -45,7 +46,7 @@ GAME_MIX = [
 ]
 
 DEPTH_MAP   = {'depth3': 3, 'depth2': 2, 'random': 0}
-MAX_MOVES   = 300   # safety cap — very long games are draws (shouldn't happen in practice)
+MAX_MOVES   = 150   # safety cap — skip games that drag on too long
 
 
 # ===== Single Game =====
@@ -130,6 +131,16 @@ def apply_180_augmentation(examples):
 
 # ===== Main =====
 
+def _worker(args_tuple):
+    """Worker function for multiprocessing — plays one game and returns examples."""
+    p1_mode, p2_mode, seed = args_tuple
+    random.seed(seed)
+    examples = play_game(p1_mode, p2_mode)
+    if examples is None:
+        return []
+    return examples + apply_180_augmentation(examples)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Generate self-play training data')
     parser.add_argument('--n-games', type=int, default=10_000,
@@ -138,6 +149,8 @@ def main():
                         help='Output file path (default: data/games.jsonl)')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed for reproducibility')
+    parser.add_argument('--workers', type=int, default=max(1, multiprocessing.cpu_count() - 1),
+                        help='Parallel worker processes (default: cpu_count-1)')
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -147,48 +160,44 @@ def main():
     out_path   = Path(args.output) if args.output else script_dir / 'data' / 'games.jsonl'
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Pre-compute cumulative weights for game mix
     modes   = [(p1, p2) for p1, p2, _ in GAME_MIX]
     weights = [w for _, _, w in GAME_MIX]
 
-    n_games     = args.n_games
-    n_written   = 0
-    n_skipped   = 0
-    start_time  = time.time()
+    # Build work list: (p1_mode, p2_mode, per_game_seed)
+    work = []
+    for i in range(args.n_games):
+        p1_mode, p2_mode = random.choices(modes, weights=weights, k=1)[0]
+        work.append((p1_mode, p2_mode, args.seed + i))
+
+    n_games    = args.n_games
+    n_written  = 0
+    n_skipped  = 0
+    n_done     = 0
+    start_time = time.time()
 
     print(f'Generating {n_games} games → {out_path}')
+    print(f'Using {args.workers} parallel workers')
     print('(Ctrl+C to stop early — partial output is still valid)\n')
 
     with open(out_path, 'w') as f:
-        for game_idx in range(n_games):
-            # Pick game configuration
-            p1_mode, p2_mode = random.choices(modes, weights=weights, k=1)[0]
+        with multiprocessing.Pool(processes=args.workers) as pool:
+            for examples in pool.imap_unordered(_worker, work):
+                n_done += 1
+                if not examples:
+                    n_skipped += 1
+                else:
+                    for ex in examples:
+                        f.write(json.dumps(ex) + '\n')
+                        n_written += 1
 
-            examples = play_game(p1_mode, p2_mode)
-
-            if examples is None:
-                n_skipped += 1
-            else:
-                # Write original examples
-                for ex in examples:
-                    f.write(json.dumps(ex) + '\n')
-                    n_written += 1
-
-                # Write 180°-augmented examples
-                for ex in apply_180_augmentation(examples):
-                    f.write(json.dumps(ex) + '\n')
-                    n_written += 1
-
-            # Progress update every 100 games
-            if (game_idx + 1) % 100 == 0 or game_idx == n_games - 1:
                 elapsed   = time.time() - start_time
-                pct       = (game_idx + 1) / n_games * 100
-                rate      = (game_idx + 1) / elapsed if elapsed > 0 else 0
-                remaining = (n_games - game_idx - 1) / rate if rate > 0 else 0
+                rate      = n_done / elapsed if elapsed > 0 else 0
+                remaining = (n_games - n_done) / rate if rate > 0 else 0
+                pct       = n_done / n_games * 100
                 print(
-                    f'  [{pct:5.1f}%] game {game_idx+1}/{n_games} | '
+                    f'  [{pct:5.1f}%] game {n_done}/{n_games} | '
                     f'{n_written} records | '
-                    f'{rate:.1f} games/s | '
+                    f'{rate:.2f} games/s | '
                     f'ETA {remaining:.0f}s',
                     end='\r', flush=True
                 )

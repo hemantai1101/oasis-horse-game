@@ -3,3 +3,7 @@
 
 # Ignore Firebase hosting files
 .firebase/
+
+# Training artifacts — keep model.pt local, only commit weights.json
+training/models/model.pt
+training/data/
