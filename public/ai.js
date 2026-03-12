@@ -1,14 +1,12 @@
 'use strict';
 
-// ===== AI State =====
+// ===== AI State + Entry Points (external API) =====
 
 const AIState = {
   enabled: false,
   playerNumber: 2,   // AI always plays as Black (Player 2)
   thinking: false,
 };
-
-// ===== Entry Points (called from game.js) =====
 
 function startVsComputer() {
   AIState.enabled = true;
@@ -25,7 +23,7 @@ function scheduleAIMove() {
   AIState.thinking = true;
   render();  // show "thinking" status
 
-  const delay = 500 + Math.random() * 500;  // 500–1000 ms
+  const delay = 400 + Math.random() * 300;
   setTimeout(() => {
     if (GameState.phase !== 'playing') return;
     AIState.thinking = false;
@@ -34,89 +32,307 @@ function scheduleAIMove() {
   }, delay);
 }
 
-// ===== AI Decision =====
+// ===== Constants =====
 
-function getAIMove() {
-  const aiPlayer    = AIState.playerNumber;
-  const humanPlayer = 3 - aiPlayer;
+// The 4 backstop cells and the approach direction each enables.
+// A piece can ONLY stop at center if the cell immediately past center
+// (in the slide direction) is occupied — that's the "backstop".
+//   backstop: the cell that must be occupied
+//   filter:   which attacking pieces can exploit this backstop
+//             (piece must be in same row/col as center, on the correct side)
+const APPROACH_CONFIGS = [
+  // Attacker above center (col=6, row<6), slides DOWN, needs backstop at (6,7)
+  { bs: { col: 6, row: 7 }, filter: h => h.col === CENTER.col && h.row < CENTER.row },
+  // Attacker below center (col=6, row>6), slides UP, needs backstop at (6,5)
+  { bs: { col: 6, row: 5 }, filter: h => h.col === CENTER.col && h.row > CENTER.row },
+  // Attacker left of center (row=6, col<6), slides RIGHT, needs backstop at (7,6)
+  { bs: { col: 7, row: 6 }, filter: h => h.row === CENTER.row && h.col < CENTER.col },
+  // Attacker right of center (row=6, col>6), slides LEFT, needs backstop at (5,6)
+  { bs: { col: 5, row: 6 }, filter: h => h.row === CENTER.row && h.col > CENTER.col },
+];
 
-  // Gather all legal moves for AI pieces
-  const candidates = [];
-  for (const horse of GameState.horses) {
-    if (horse.owner !== aiPlayer) continue;
-    for (const move of getValidMoves(horse)) {
-      candidates.push({ horse, move });
-    }
-  }
-  if (!candidates.length) return null;
+// ===== Pure State Helpers =====
 
-  // 1. Always take a winning move immediately
-  const win = candidates.find(c => c.move.col === CENTER.col && c.move.row === CENTER.row);
-  if (win) return win;
-
-  // 2. Try to block opponent's winning slide path (75 % of the time — imperfect on purpose)
-  if (Math.random() < 0.75) {
-    const block = findBlockingMove(humanPlayer, candidates);
-    if (block) return block;
-  }
-
-  // 3. Score remaining moves and pick from the top 3 with weighted randomness
-  const scored = candidates.map(c => ({ ...c, score: scoreMove(c.horse, c.move) }));
-  scored.sort((a, b) => b.score - a.score);
-  return pickWeighted(scored.slice(0, 3));
+// Lightweight snapshot for minimax — never touches global GameState during search.
+function snapshotFromGameState() {
+  const horses = GameState.horses.map(h => ({ id: h.id, owner: h.owner, col: h.col, row: h.row }));
+  const board = {};
+  for (const h of horses) board[boardKey(h.col, h.row)] = h;
+  return { horses, board, currentPlayer: GameState.currentPlayer, lastMoveToCenter: false };
 }
 
-// ===== Scoring =====
-
-function scoreMove(horse, move) {
-  const oldDist    = Math.abs(horse.col - CENTER.col) + Math.abs(horse.row - CENTER.row);
-  const newDist    = Math.abs(move.col  - CENTER.col) + Math.abs(move.row  - CENTER.row);
-  const improvement = oldDist - newDist;       // how much closer to center
-  const destValue   = 22 - newDist;            // absolute closeness of destination
-  const momentum    = Math.max(0, 10 - oldDist); // extra credit for already-close pieces
-  const noise       = (Math.random() - 0.5) * 12; // controlled randomness
-
-  return improvement * 12 + destValue * 1.5 + momentum * 2 + noise;
+// Pure state transition. Returns a brand-new snapshot (immutable style).
+function applyMove(snap, horseId, move) {
+  const horses = snap.horses.map(h =>
+    h.id === horseId ? { ...h, col: move.col, row: move.row } : h
+  );
+  const board = {};
+  for (const h of horses) board[boardKey(h.col, h.row)] = h;
+  return {
+    horses,
+    board,
+    currentPlayer: 3 - snap.currentPlayer,
+    lastMoveToCenter: move.col === CENTER.col && move.row === CENTER.row,
+  };
 }
 
-// ===== Blocking =====
+// ===== Pure Move Generators =====
 
-// If the human has a slide path directly to center, find an AI move that
-// places a piece along that path to interrupt it.
-function findBlockingMove(humanPlayer, aiCandidates) {
-  for (const horse of GameState.horses) {
-    if (horse.owner !== humanPlayer) continue;
-    const opponentMoves = getValidMoves(horse);
-    const winnableSlides = opponentMoves.filter(
-      m => m.col === CENTER.col && m.row === CENTER.row && m.moveType === 'slide'
-    );
-    for (const _slide of winnableSlides) {
-      // Determine direction of the slide (cardinal only)
-      const dc = horse.col === CENTER.col ? 0 : Math.sign(CENTER.col - horse.col);
-      const dr = horse.row === CENTER.row ? 0 : Math.sign(CENTER.row - horse.row);
-      let c = horse.col + dc, r = horse.row + dr;
-      while (!(c === CENTER.col && r === CENTER.row)) {
-        const block = aiCandidates.find(a => a.move.col === c && a.move.row === r);
-        if (block) return block;
-        c += dc; r += dr;
+// Slide in one direction; returns the endpoint cell or null if the piece can't move.
+function pureSlideRay(horse, dc, dr, board) {
+  let c = horse.col + dc, r = horse.row + dr;
+  while (c >= 1 && c <= BOARD_SIZE && r >= 1 && r <= BOARD_SIZE && !board[boardKey(c, r)]) {
+    c += dc; r += dr;
+  }
+  // Step back to last valid cell
+  c -= dc; r -= dr;
+  if (c === horse.col && r === horse.row) return null; // couldn't move at all
+  return { col: c, row: r, moveType: 'slide' };
+}
+
+function pureSlideMoves(horse, board) {
+  const moves = [];
+  for (const [dc, dr] of [[0,-1],[0,1],[-1,0],[1,0]]) {
+    const m = pureSlideRay(horse, dc, dr, board);
+    if (m) moves.push(m);
+  }
+  return moves;
+}
+
+// Knight destinations must land in DESERT zone (same rule as game.js line 107).
+function pureKnightMoves(horse, board) {
+  const moves = [];
+  for (const [dc, dr] of KNIGHT_OFFSETS) {
+    const c = horse.col + dc, r = horse.row + dr;
+    if (c < 1 || c > BOARD_SIZE || r < 1 || r > BOARD_SIZE) continue;
+    if (board[boardKey(c, r)]) continue;
+    if (getZone(c, r) !== ZONE.DESERT) continue;
+    moves.push({ col: c, row: r, moveType: 'knight' });
+  }
+  return moves;
+}
+
+function pureValidMoves(horse, board) {
+  return [...pureSlideMoves(horse, board), ...pureKnightMoves(horse, board)];
+}
+
+// ===== Threat Analysis =====
+
+// True if every cell strictly between fromHorse and CENTER (along the same row or col) is empty.
+function pathClear(fromHorse, board) {
+  const dc = Math.sign(CENTER.col - fromHorse.col);
+  const dr = Math.sign(CENTER.row - fromHorse.row);
+  if (dc !== 0 && dr !== 0) return false; // not aligned
+  let c = fromHorse.col + dc, r = fromHorse.row + dr;
+  while (!(c === CENTER.col && r === CENTER.row)) {
+    if (board[boardKey(c, r)]) return false;
+    c += dc; r += dr;
+  }
+  return true;
+}
+
+// For each of the 4 approach axes, compute a score contribution based on
+// who occupies the backstop cell and who has an aligned attacker with a clear path.
+function scoreBackstopControl(snap) {
+  const ai  = AIState.playerNumber;
+  const opp = 3 - ai;
+  let score = 0;
+
+  for (const { bs, filter } of APPROACH_CONFIGS) {
+    const occupant = snap.board[boardKey(bs.col, bs.row)];
+    if (!occupant) continue;
+
+    // Find any aligned attacker with a clear path on this axis
+    for (const h of snap.horses) {
+      if (!filter(h)) continue;
+      if (!pathClear(h, snap.board)) continue;
+
+      // A live attack exists. Score based on who attacks and who backstops.
+      if (h.owner === ai && occupant.owner === ai) {
+        score += 1500;  // AI has set up a winning position
+      } else if (h.owner === opp && occupant.owner === opp) {
+        score -= 2000;  // Opponent is about to win
+      } else if (h.owner === opp && occupant.owner === ai) {
+        score -= 800;   // AI piece is opponent's backstop — the critical mistake
+      } else if (h.owner === ai && occupant.owner === opp) {
+        score += 500;   // Opponent piece acts as AI's backstop (opportunistic)
       }
     }
   }
-  return null;
+  return score;
 }
 
-// ===== Weighted Random Pick =====
+// ===== Evaluation =====
 
-// Picks from a pre-sorted array using weights [6, 3, 1] so the best move
-// is chosen most often but not always.
-function pickWeighted(sorted) {
-  if (!sorted.length) return null;
-  const weights = [6, 3, 1].slice(0, sorted.length);
-  const total   = weights.reduce((a, b) => a + b, 0);
-  let rand = Math.random() * total;
-  for (let i = 0; i < weights.length; i++) {
-    rand -= weights[i];
-    if (rand <= 0) return sorted[i];
+function evaluate(snap) {
+  const ai  = AIState.playerNumber;
+  const opp = 3 - ai;
+  let score = 0;
+
+  // Core: backstop-aware threat scoring
+  score += scoreBackstopControl(snap);
+
+  // Near-win bonus: aligned + clear path, but backstop not yet in place
+  for (const { bs, filter } of APPROACH_CONFIGS) {
+    if (snap.board[boardKey(bs.col, bs.row)]) continue; // already handled above
+    for (const h of snap.horses) {
+      if (!filter(h)) continue;
+      if (!pathClear(h, snap.board)) continue;
+      // Attacker is aligned and path is clear but no backstop yet
+      score += h.owner === ai ? 300 : -400;
+    }
   }
-  return sorted[0];
+
+  // General positioning — closeness to center, but penalise forest clustering
+  for (const h of snap.horses) {
+    const dist = Math.abs(h.col - CENTER.col) + Math.abs(h.row - CENTER.row);
+    const inForest = dist > 0 && dist <= 2;
+    let pos = (10 - dist) * 8;
+    if (inForest) pos *= 0.3; // being crammed in forest without a backstop is low value
+    if (h.owner === ai) score += pos;
+    else                score -= pos;
+  }
+
+  return score;
+}
+
+// ===== Move Ordering =====
+
+// Returns [{horseId, move}] for the current player, sorted for good alpha-beta cutoffs.
+function generateOrderedMoves(snap) {
+  const ai  = AIState.playerNumber;
+  const player = snap.currentPlayer;
+  const moves = [];
+
+  for (const h of snap.horses) {
+    if (h.owner !== player) continue;
+    for (const move of pureValidMoves(h, snap.board)) {
+      moves.push({ horseId: h.id, move });
+    }
+  }
+
+  // Priority scoring for ordering (not the same as evaluate — just for ordering)
+  moves.forEach(m => {
+    const { move } = m;
+    let pri = 0;
+    // 1. Immediate win
+    if (move.col === CENTER.col && move.row === CENTER.row) { pri = 1e9; }
+    else {
+      // 2. Creating a winning backstop for an aligned friendly attacker
+      for (const { bs, filter } of APPROACH_CONFIGS) {
+        if (move.col === bs.col && move.row === bs.row) {
+          // Does a friendly attacker exist with a clear path?
+          for (const h of snap.horses) {
+            if (h.owner !== player || !filter(h)) continue;
+            if (pathClear(h, snap.board)) { pri = Math.max(pri, 8000); }
+          }
+        }
+      }
+      // 3. Blocking opponent's aligned attacker
+      const opp = 3 - player;
+      for (const { filter } of APPROACH_CONFIGS) {
+        for (const h of snap.horses) {
+          if (h.owner !== opp || !filter(h)) continue;
+          if (!pathClear(h, snap.board)) continue;
+          // Blocking moves: placing on the path between attacker and center
+          const dc = Math.sign(CENTER.col - h.col);
+          const dr = Math.sign(CENTER.row - h.row);
+          let c = h.col + dc, r = h.row + dr;
+          while (!(c === CENTER.col && r === CENTER.row)) {
+            if (move.col === c && move.row === r) pri = Math.max(pri, 5000);
+            c += dc; r += dr;
+          }
+        }
+      }
+      // 4. Fallback: proximity to center
+      if (pri === 0) {
+        const dist = Math.abs(move.col - CENTER.col) + Math.abs(move.row - CENTER.row);
+        pri = 10 - dist;
+      }
+    }
+    m.priority = pri;
+  });
+
+  moves.sort((a, b) => b.priority - a.priority);
+  return moves;
+}
+
+// ===== Minimax =====
+
+function minimax(snap, depth, alpha, beta, maximizing, startTime) {
+  // Time guard — avoids going over budget; returns bound rather than ±Infinity
+  // so an incomplete subtree doesn't poison the parent's choice.
+  if (Date.now() - startTime > 750) {
+    return maximizing ? alpha : beta;
+  }
+
+  // Terminal: the player who just moved landed on center
+  if (snap.lastMoveToCenter) {
+    const winner = 3 - snap.currentPlayer; // currentPlayer already flipped in applyMove
+    return winner === AIState.playerNumber ? +10000 : -10000;
+  }
+
+  if (depth === 0) return evaluate(snap);
+
+  const moves = generateOrderedMoves(snap);
+  if (!moves.length) return evaluate(snap);
+
+  if (maximizing) {
+    let best = -Infinity;
+    for (const { horseId, move } of moves) {
+      const child = applyMove(snap, horseId, move);
+      const val = minimax(child, depth - 1, alpha, beta, false, startTime);
+      if (val > best) best = val;
+      if (val > alpha) alpha = val;
+      if (alpha >= beta) break;
+    }
+    return best;
+  } else {
+    let best = +Infinity;
+    for (const { horseId, move } of moves) {
+      const child = applyMove(snap, horseId, move);
+      const val = minimax(child, depth - 1, alpha, beta, true, startTime);
+      if (val < best) best = val;
+      if (val < beta) beta = val;
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+
+// ===== Root Search =====
+
+// Maps a snapshot horseId back to the actual GameState horse reference that
+// executeMove() needs (it mutates the horse object in place).
+function resolveToGameObjects({ horseId, move }) {
+  const horse = GameState.horses.find(h => h.id === horseId);
+  return horse ? { horse, move } : null;
+}
+
+function getAIMove() {
+  const snap = snapshotFromGameState();
+  const startTime = Date.now();
+
+  const moves = generateOrderedMoves(snap);
+  if (!moves.length) return null;
+
+  // Take an immediate win without searching
+  const winMove = moves[0];
+  if (winMove.move.col === CENTER.col && winMove.move.row === CENTER.row) {
+    return resolveToGameObjects(winMove);
+  }
+
+  let bestVal = -Infinity;
+  let bestMove = moves[0];
+
+  for (const candidate of moves) {
+    const child = applyMove(snap, candidate.horseId, candidate.move);
+    const val = minimax(child, 3, -Infinity, +Infinity, false, startTime);
+    if (val > bestVal) {
+      bestVal = val;
+      bestMove = candidate;
+    }
+  }
+
+  return resolveToGameObjects(bestMove);
 }
