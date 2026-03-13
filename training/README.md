@@ -215,10 +215,11 @@ positive feedback loop. This is the same principle as AlphaGo Zero and AlphaZero
 ## VM Commands (GCP — oasis-budget-worker)
 
 Use these when running generation on the cloud VM instead of locally.
+VM user: `trainer` | Instance: `oasis-budget-worker` | Project: `ff-ml-project` | Zone: `us-central1-c`
 
 **SSH into the VM:**
 ```bash
-gcloud compute ssh oasis-budget-worker \
+gcloud compute ssh trainer@oasis-budget-worker \
   --project=ff-ml-project \
   --zone=us-central1-c \
   --tunnel-through-iap
@@ -230,13 +231,13 @@ gcloud compute scp \
   --project=ff-ml-project \
   --zone=us-central1-c \
   --tunnel-through-iap \
-  --recurse ./training oasis-budget-worker:~/oasis-horse-game/
+  --recurse ./training trainer@oasis-budget-worker:~/oasis-horse-game/
 ```
 
 **Download generated data file from VM:**
 ```bash
 gcloud compute scp \
-  oasis-budget-worker:/home/hemantai/oasis-horse-game/training/data/games.jsonl \
+  trainer@oasis-budget-worker:/home/trainer/oasis-horse-game/training/data/games.jsonl \
   ./training/data/games_10000_3_.2_.15.jsonl \
   --project=ff-ml-project \
   --zone=us-central1-c \
@@ -249,7 +250,7 @@ screen -S horse-training
 
 pypy3 training/generate_games.py \
   --n-games 10000 \
-  --workers 7 \
+  --workers 14 \
   --depth 3 \
   --time-limit 0.2 \
   --epsilon 0.15
@@ -260,8 +261,8 @@ pypy3 training/generate_games.py \
 
 **Verify file is fully written before downloading:**
 ```bash
-wc -l /home/hemantai/oasis-horse-game/training/data/games.jsonl
-lsof   /home/hemantai/oasis-horse-game/training/data/games.jsonl
+wc -l /home/trainer/oasis-horse-game/training/data/games.jsonl
+lsof   /home/trainer/oasis-horse-game/training/data/games.jsonl
 # lsof should return nothing — if pypy3 still appears, generation is still running
 ```
 
