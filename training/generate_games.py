@@ -46,7 +46,7 @@ GAME_MIX = [
 ]
 
 DEPTH_MAP   = {'depth3': 5, 'depth2': 3, 'random': 0}  # depth3=5 matches improved browser AI
-MAX_MOVES   = 150   # safety cap — skip games that drag on too long
+MAX_MOVES   = 400   # safety cap — skip games that drag on too long
 
 
 # ===== Single Game =====
@@ -75,7 +75,7 @@ def play_game(p1_mode, p2_mode):
             result = get_random_move(horses, board, current_player)
         else:
             result = get_best_move(horses, board, current_player,
-                                   depth=depths[current_player], time_limit=2.0)
+                                   depth=depths[current_player], time_limit=1.0)
 
         if result is None:
             return None  # no legal moves — skip game
@@ -194,8 +194,10 @@ def main():
                 rate      = n_done / elapsed if elapsed > 0 else 0
                 remaining = (n_games - n_done) / rate if rate > 0 else 0
                 pct       = n_done / n_games * 100
+                skip_pct  = n_skipped / n_done * 100 if n_done > 0 else 0
                 print(
                     f'  [{pct:5.1f}%] game {n_done}/{n_games} | '
+                    f'skip {skip_pct:.0f}% | '
                     f'{n_written} records | '
                     f'{rate:.2f} games/s | '
                     f'ETA {remaining:.0f}s',
