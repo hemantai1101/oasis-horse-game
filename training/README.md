@@ -76,6 +76,100 @@ python training/export_weights.py
 | `requirements.txt` | Python dependencies (torch, numpy) |
 | `data/` | Generated game records (gitignored — create by running generate_games.py) |
 | `models/` | Saved model checkpoints (gitignored) |
+| `verify_data.py` | Sanity-checks a `.jsonl` file — feature length, labels, augmentation pairs |
+
+---
+
+## Script Reference
+
+### generate_games.py
+
+Plays self-play games between minimax AIs and writes board positions + outcomes to a `.jsonl` file. Each game also produces a 180° rotated copy (augmentation), so the output is always 2× the number of positions played.
+
+| Parameter | Default | When to change |
+|-----------|---------|----------------|
+| `--n-games` | 10000 | Increase for a larger dataset (better generalisation). Use 10–100 for smoke tests. |
+| `--output` | `data/games.jsonl` | Set a descriptive name per run so files don't get overwritten, e.g. `data/games_10k_d3.jsonl`. |
+| `--seed` | 42 | Change to get a different dataset with the same settings. Keep fixed for reproducibility. |
+| `--workers` | cpu_count − 1 | Match your core count. On c2-standard-16 (VM) use `14`. On a 4-core laptop use `3`. |
+| `--depth` | 5 | Controls AI strength and generation speed. `3` = fast & good enough. `5` = slower but higher quality data. |
+| `--time-limit` | 1.0 | Max seconds per move. Lower = faster generation. `0.2` is a good balance on the VM. |
+| `--epsilon` | 0.1 | Exploration rate (0.0–1.0). `0.0` = pure minimax (repetitive games). `0.15` = occasional random moves for position diversity. |
+
+**Example commands:**
+
+```bash
+# Quick smoke test — 10 games, verify everything works
+pypy3 training/generate_games.py --n-games 10 --workers 3 --depth 3
+
+# Standard production run — VM with 16 cores
+pypy3 training/generate_games.py \
+  --n-games 10000 --workers 14 --depth 3 --time-limit 0.2 --epsilon 0.15
+
+# Large dataset for stage 2+ — more games, deeper search
+pypy3 training/generate_games.py \
+  --n-games 50000 --workers 14 --depth 3 --time-limit 0.2 --epsilon 0.15 \
+  --output data/games_50k.jsonl
+
+# Reproducible run — fix the seed
+pypy3 training/generate_games.py --n-games 10000 --seed 123
+```
+
+> **Note:** Use `pypy3` on the VM (faster CPU-bound execution). Use `python3` locally if PyPy is not installed.
+
+---
+
+### train.py
+
+Trains the value network on a `.jsonl` file. Saves the best checkpoint (by validation loss) to `models/model.pt` and a rolling checkpoint every 5 epochs to `models/model_latest.pt`.
+
+| Parameter | Default | When to change |
+|-----------|---------|----------------|
+| `--data` | `training/data/games.jsonl` | Point to a specific file if you have multiple datasets. |
+| `--epochs` | 30 | Increase to `50` if val loss is still decreasing at epoch 30. Stop earlier if val loss plateaus or rises (overfitting). |
+| `--batch-size` | 1024 | Increase to `2048` for datasets > 500k records (faster per epoch). Lower if you run out of memory. |
+| `--lr` | 0.001 | Lower to `5e-4` or `1e-4` if training loss is unstable or spiky. |
+| `--weight-decay` | 1e-4 | Increase if the model overfits (val loss rises while train loss falls). |
+
+**Example commands:**
+
+```bash
+# Standard run — defaults are good for most cases
+python3 training/train.py
+
+# Longer training on a large dataset
+python3 training/train.py --epochs 50 --batch-size 2048 \
+  --data training/data/games_50k.jsonl
+
+# Tune if training is unstable
+python3 training/train.py --epochs 50 --lr 5e-4 --weight-decay 1e-3
+```
+
+**Reading the output:** Each epoch prints `train_loss` and `val_loss`.
+- Both decreasing → good, keep training
+- `val_loss` rising while `train_loss` falls → overfitting; stop or increase `--weight-decay`
+- Both flat from epoch 1 → learning rate too low, or dataset too small
+
+---
+
+### verify_data.py
+
+Sanity-checks a generated `.jsonl` file before training. Exits with code `0` on pass, `1` on failure — safe to chain in scripts.
+
+**Checks performed:**
+1. All feature vectors are length 41
+2. Labels are only `+1.0` or `−1.0`
+3. Record count is even (original + augmented pairs)
+4. Label distribution is roughly balanced (50/50)
+5. Every record has a valid 180° augmented counterpart in the file
+
+```bash
+# Basic usage
+python3 training/verify_data.py training/data/games.jsonl
+
+# Chain after download — stop pipeline if data is bad
+python3 training/verify_data.py training/data/games_10k.jsonl && python3 training/train.py
+```
 
 ---
 
