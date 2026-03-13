@@ -62,7 +62,6 @@ def path_clear(horse, board):
         c += dc
         r += dr
     return True
-
 def count_mobility(horse, board):
     return len(valid_moves(horse, board))
 
@@ -140,24 +139,6 @@ def evaluate(snap, ai_player):
     score += (ai_mobility - opp_mobility) * 8
 
     # 4. PIECE SPREAD / DEVELOPMENT DIVERSITY
-    ai_developed = 0
-    for h in ai_horses:
-        in_start_corner = (h['col'] >= 9 and h['row'] <= 3) or (h['col'] <= 3 and h['row'] >= 9) # Assuming AI is P2 usually, but let's make it robust
-        # Actually in ai.js it's hardcoded based on start positions. Let's replicate.
-        if h['owner'] == 2:
-            in_start_corner = (h['col'] >= 9 and h['row'] <= 3) or (h['col'] <= 3 and h['row'] >= 9)
-        else:
-            in_start_corner = (h['col'] <= 3 and h['row'] <= 3) or (h['col'] >= 9 and h['row'] >= 9)
-
-        if not in_start_corner: ai_developed += 1
-    score += ai_developed * 25 if ai == 2 else ai_developed * -25 # Wait, the sign is handled differently in JS. Let's fix this based on JS logic.
-
-    # Re-evaluating Section 4 to perfectly match JS:
-    # In JS:
-    # aiDeveloped = pieces NOT in P2 corners (if AI is P2)
-    # oppDeveloped = pieces NOT in P1 corners (if Opp is P1)
-    # This assumes AI is ALWAYS Player 2 in JS. In python we might play as P1 or P2.
-    # Let's generalize based on owner.
     ai_dev = 0
     opp_dev = 0
     for h in ai_horses:
@@ -341,9 +322,9 @@ def minimax(snap, depth, alpha, beta, maximizing, ai_player, deadline):
 
 # ===== Root Search =====
 
-def get_best_move(horses, board, player, depth=5, time_limit=2.0, randomise_equal=True):
+def get_best_move(horses, board, player, depth=5, time_limit=2.0, epsilon=0.0):
     """
-    Mirrors getAIMove() in ai.js with iterative deepening.
+    Mirrors getAIMove() in ai.js with iterative deepening and epsilon-greedy selection.
     """
     snap = {
         'horses': horses,
@@ -361,41 +342,53 @@ def get_best_move(horses, board, player, depth=5, time_limit=2.0, randomise_equa
     if (first_move['move']['col'], first_move['move']['row']) == CENTER:
         return first_move['horseId'], first_move['move']
 
-    time_budget = time_limit
-    deadline = time.time() + time_budget
-    best_val = -math.inf
-    best_move = moves[0]
+    deadline = time.time() + time_limit
+    
+    move_evals = []
 
-    for d in range(3, depth + 1):
-        if time.time() > deadline: break
+    for d in range(1, depth + 1):
+        if time.time() > deadline:
+            break
 
-        depth_best_val = -math.inf
-        depth_best_move = moves[0]
-        completed = True
-
-        for candidate in moves:
+        current_depth_evals = []
+        fully_searched = True
+        for candidate_move in moves:
             if time.time() > deadline:
-                completed = False
+                fully_searched = False
                 break
             
-            new_horses, new_board = apply_move(snap['horses'], snap['board'], candidate['horseId'], candidate['move'])
+            new_horses, new_board = apply_move(snap['horses'], snap['board'], candidate_move['horseId'], candidate_move['move'])
             child_snap = {
                 'horses': new_horses,
                 'board': new_board,
                 'currentPlayer': 3 - snap['currentPlayer'],
-                'lastMoveToCenter': candidate['move']['col'] == CENTER[0] and candidate['move']['row'] == CENTER[1]
+                'lastMoveToCenter': candidate_move['move']['col'] == CENTER[0] and candidate_move['move']['row'] == CENTER[1]
             }
 
             val = minimax(child_snap, d - 1, -math.inf, math.inf, False, player, deadline)
-            
-            if val > depth_best_val:
-                depth_best_val = val
-                depth_best_move = candidate
+            current_depth_evals.append({'move': candidate_move, 'val': val})
 
-        if completed or depth_best_val > best_val:
-            best_val = depth_best_val
-            best_move = depth_best_move
+        if fully_searched:
+            current_depth_evals.sort(key=lambda x: x['val'], reverse=True)
+            move_evals = current_depth_evals
+        else:
+            # Discard partial results of this depth and use the previous depth's results
+            break
 
+    if not move_evals:
+        # Fallback to heuristic if no depth was completed
+        best_move = moves[0]
+        return best_move['horseId'], best_move['move']
+
+    # Epsilon-greedy selection
+    if random.random() < epsilon:
+        # Choose from top 3 moves, if available
+        num_top_moves = min(len(move_evals), 3)
+        chosen_eval = random.choice(move_evals[:num_top_moves])
+    else:
+        chosen_eval = move_evals[0]
+
+    best_move = chosen_eval['move']
     return best_move['horseId'], best_move['move']
 
 

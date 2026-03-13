@@ -45,13 +45,12 @@ GAME_MIX = [
     ('depth3', 'random', 0.05),   # 5%  — P2 random
 ]
 
-DEPTH_MAP   = {'depth3': 5, 'depth2': 3, 'random': 0}  # depth3=5 matches improved browser AI
 MAX_MOVES   = 400   # safety cap — skip games that drag on too long
 
 
 # ===== Single Game =====
 
-def play_game(p1_mode, p2_mode):
+def play_game(p1_mode, p2_mode, depth, time_limit, epsilon):
     """
     Play one game. Returns a list of (features, label) pairs.
     label = +1.0 if the player to move eventually won, -1.0 if lost.
@@ -62,7 +61,6 @@ def play_game(p1_mode, p2_mode):
     history = []   # list of (features, player_to_move)
 
     modes  = {1: p1_mode, 2: p2_mode}
-    depths = {1: DEPTH_MAP[p1_mode], 2: DEPTH_MAP[p2_mode]}
 
     for _ in range(MAX_MOVES):
         # Record position BEFORE the move
@@ -75,7 +73,7 @@ def play_game(p1_mode, p2_mode):
             result = get_random_move(horses, board, current_player)
         else:
             result = get_best_move(horses, board, current_player,
-                                   depth=depths[current_player], time_limit=1.0)
+                                   depth=depth, time_limit=time_limit, epsilon=epsilon)
 
         if result is None:
             return None  # no legal moves — skip game
@@ -95,14 +93,6 @@ def play_game(p1_mode, p2_mode):
         current_player = 3 - current_player
 
     return None  # hit move cap
-
-
-def augment_examples(examples_horses_history, horses_history, winner):
-    """
-    Not used directly — augmentation is applied at the feature level after a game.
-    See apply_augmentation() below.
-    """
-    pass
 
 
 def apply_180_augmentation(examples):
@@ -133,9 +123,9 @@ def apply_180_augmentation(examples):
 
 def _worker(args_tuple):
     """Worker function for multiprocessing — plays one game and returns examples."""
-    p1_mode, p2_mode, seed = args_tuple
+    p1_mode, p2_mode, seed, depth, time_limit, epsilon = args_tuple
     random.seed(seed)
-    examples = play_game(p1_mode, p2_mode)
+    examples = play_game(p1_mode, p2_mode, depth, time_limit, epsilon)
     if examples is None:
         return []
     return examples + apply_180_augmentation(examples)
@@ -151,6 +141,9 @@ def main():
                         help='Random seed for reproducibility')
     parser.add_argument('--workers', type=int, default=max(1, multiprocessing.cpu_count() - 1),
                         help='Parallel worker processes (default: cpu_count-1)')
+    parser.add_argument('--depth', type=int, default=5, help='Minimax search depth')
+    parser.add_argument('--time-limit', type=float, default=1.0, help='Time limit per move in seconds')
+    parser.add_argument('--epsilon', type=float, default=0.1, help='Epsilon for epsilon-greedy move selection')
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -163,11 +156,11 @@ def main():
     modes   = [(p1, p2) for p1, p2, _ in GAME_MIX]
     weights = [w for _, _, w in GAME_MIX]
 
-    # Build work list: (p1_mode, p2_mode, per_game_seed)
+    # Build work list: (p1_mode, p2_mode, per_game_seed, depth, time_limit, epsilon)
     work = []
     for i in range(args.n_games):
         p1_mode, p2_mode = random.choices(modes, weights=weights, k=1)[0]
-        work.append((p1_mode, p2_mode, args.seed + i))
+        work.append((p1_mode, p2_mode, args.seed + i, args.depth, args.time_limit, args.epsilon))
 
     n_games    = args.n_games
     n_written  = 0
@@ -177,6 +170,7 @@ def main():
 
     print(f'Generating {n_games} games → {out_path}')
     print(f'Using {args.workers} parallel workers')
+    print(f'Depth: {args.depth}, Time Limit: {args.time_limit}s, Epsilon: {args.epsilon}')
     print('(Ctrl+C to stop early — partial output is still valid)\n')
 
     with open(out_path, 'w') as f:
