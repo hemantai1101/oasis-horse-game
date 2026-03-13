@@ -15,7 +15,7 @@ let NNWeights = null;
 
 // Set to true to force heuristic evaluation even when weights are loaded.
 // Useful for testing the new heuristic without retraining the NN.
-const FORCE_HEURISTIC = true;
+const FORCE_HEURISTIC = false;
 
 async function loadNNModel() {
   try {

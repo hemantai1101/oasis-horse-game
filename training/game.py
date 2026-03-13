@@ -153,12 +153,14 @@ def augment_horses_180(horses):
 
 def state_to_features(horses, current_player):
     """
-    Encode a board position as a 21-element list of floats in [0, 1].
+    Encode a board position as a 41-element list of floats in [0, 1].
 
     Layout:
-      [0..9]  P1 pieces sorted by (col, row): 5 × (col-1)/10, (row-1)/10
-      [10..19] P2 pieces sorted by (col, row): 5 × (col-1)/10, (row-1)/10
-      [20]    current player: 0.0 if P1, 1.0 if P2
+      [0..19]  P1 pieces sorted by (col, row): 10 × (col-1)/10, (row-1)/10
+      [20..39] P2 pieces sorted by (col, row): 10 × (col-1)/10, (row-1)/10
+      [40]     current player: 0.0 if P1, 1.0 if P2
+
+    Each player has 10 horses across 2 corners (e.g. P1 = TL + BR corners).
     """
     p1 = sorted([h for h in horses if h['owner'] == 1], key=lambda h: (h['col'], h['row']))
     p2 = sorted([h for h in horses if h['owner'] == 2], key=lambda h: (h['col'], h['row']))
@@ -167,4 +169,4 @@ def state_to_features(horses, current_player):
         feats.append((h['col'] - 1) / 10.0)
         feats.append((h['row'] - 1) / 10.0)
     feats.append(0.0 if current_player == 1 else 1.0)
-    return feats  # length 21
+    return feats  # length 41
