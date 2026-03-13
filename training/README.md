@@ -217,6 +217,11 @@ positive feedback loop. This is the same principle as AlphaGo Zero and AlphaZero
 Use these when running generation on the cloud VM instead of locally.
 VM user: `trainer` | Instance: `oasis-budget-worker` | Project: `ff-ml-project` | Zone: `us-central1-c`
 
+**First-time VM setup (run once after creating the instance):**
+```bash
+sudo apt-get update && sudo apt-get install -y pypy3 screen
+```
+
 **SSH into the VM:**
 ```bash
 gcloud compute ssh trainer@oasis-budget-worker \
