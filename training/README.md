@@ -217,6 +217,21 @@ positive feedback loop. This is the same principle as AlphaGo Zero and AlphaZero
 Use these when running generation on the cloud VM instead of locally.
 VM user: `trainer` | Instance: `oasis-budget-worker` | Project: `ff-ml-project` | Zone: `us-central1-c`
 
+> ⚠️ **Always use Ubuntu** (`ubuntu-2204-lts`) — NOT Debian. The `pypy3` apt package is broken on Debian and requires a manual workaround.
+
+**Create the VM (run once):**
+```bash
+gcloud compute instances create oasis-budget-worker \
+  --project=ff-ml-project \
+  --zone=us-central1-c \
+  --machine-type=c2-standard-16 \
+  --image-family=ubuntu-2204-lts \
+  --image-project=ubuntu-os-cloud \
+  --boot-disk-size=50GB \
+  --no-address \
+  --scopes=default
+```
+
 **First-time VM setup (run once after creating the instance):**
 ```bash
 sudo apt-get update && sudo apt-get install -y pypy3 screen
