@@ -14,7 +14,7 @@ evaluation heuristics in `public/ai.js` — the minimax search structure stays i
 pip install torch numpy
 ```
 
-No GPU is needed. The model is tiny (~13,000 parameters) and trains in minutes on any laptop.
+No GPU is needed. The model is tiny (~11,500 parameters) and trains in minutes on any laptop.
 
 ---
 
@@ -68,7 +68,7 @@ python training/export_weights.py
 | `game.py` | Python port of `public/game.js` — board, moves, zones |
 | `minimax.py` | Python port of `public/ai.js` — backstop evaluation, minimax search |
 | `generate_games.py` | Self-play runner; writes `data/games.jsonl` |
-| `train.py` | PyTorch training loop; writes `models/model.pt` |
+| `train.py` | PyTorch training loop; writes `models/model.pt` (best val loss) and `models/model_latest.pt` (every 5 epochs) |
 | `export_weights.py` | Converts `model.pt` → `../public/model/weights.json` |
 | `requirements.txt` | Python dependencies (torch, numpy) |
 | `data/` | Generated game records (gitignored — create by running generate_games.py) |
@@ -106,10 +106,12 @@ It replaces the handcrafted `evaluate()` in the minimax search as the leaf evalu
 ## Model Architecture
 
 ```
-Input (21) → Linear(128) + ReLU → Linear(64) + ReLU → Linear(1) + Tanh
+Input (21) → Linear(128) + ReLU + BatchNorm → Linear(64) + ReLU + BatchNorm → Linear(1) + Tanh
 ```
 
 Output is in **[−1, +1]**. Positive = good for the player to move; negative = bad.
+
+Training uses Adam with cosine LR annealing and L2 weight decay (`weight_decay=1e-4`).
 
 ---
 
@@ -137,7 +139,7 @@ stronger AI than the previous one.
 
 ### Stage 1 — Supervised Learning from Minimax (this stage)
 
-**Data source:** Python minimax AI (depth 3) plays against itself.
+**Data source:** Python minimax AI (depth 5 by default) plays against itself.
 **Constraint:** The neural net is bounded by the minimax teacher's quality.
 **Practical gain:** NN inference is ~1000× faster than minimax search, so the same
                     NN can be used inside a *deeper* minimax search tree.

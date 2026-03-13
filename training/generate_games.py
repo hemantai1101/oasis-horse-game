@@ -105,13 +105,13 @@ def apply_180_augmentation(examples):
     augmented = []
     for ex in examples:
         feats = ex['features']
-        # features layout: [p1: 10 vals][p2: 10 vals][player: 1 val]
+        # features layout: [p1: 20 vals][p2: 20 vals][player: 1 val]
         # each pair (col_norm, row_norm) where col_norm = (col-1)/10
         # rotation: col → (12-col), so col_norm' = (12 - (col_norm*10+1) - 1)/10
         #         = (10 - col_norm*10)/10 = 1 - col_norm
         # same for row_norm
         new_feats = list(feats)
-        for i in range(0, 20, 2):      # 10 pairs in positions [0..19]
+        for i in range(0, 40, 2):      # 20 pairs in positions [0..39] (10 P1 + 10 P2 horses)
             new_feats[i]   = 1.0 - feats[i]    # col
             new_feats[i+1] = 1.0 - feats[i+1]  # row
         # player indicator stays the same (rotation doesn't change whose turn it is)
