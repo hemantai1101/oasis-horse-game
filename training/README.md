@@ -228,7 +228,6 @@ gcloud compute instances create oasis-budget-worker \
   --image-family=ubuntu-2204-lts \
   --image-project=ubuntu-os-cloud \
   --boot-disk-size=50GB \
-  --no-address \
   --scopes=default
 ```
 
