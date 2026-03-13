@@ -26,6 +26,9 @@ Run these three commands from the **repository root** (or adjust paths according
 # 1. Generate self-play games  (~10–30 min for 10,000 games)
 python training/generate_games.py
 
+# 1b. Verify the generated data before training
+python3 training/verify_data.py training/data/games.jsonl
+
 # 2. Train the neural network  (~1–5 min)
 python training/train.py
 
