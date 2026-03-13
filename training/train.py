@@ -1,9 +1,9 @@
 """
 train.py — PyTorch training script for the Squirrel Oasis value network.
 
-Model:  Input(21) → Dense(128, ReLU) → Dense(64, ReLU) → Dense(1, Tanh)
+Model:  Input(21) → Dense(128, ReLU) → BatchNorm → Dense(64, ReLU) → BatchNorm → Dense(1, Tanh)
 Loss:   MSE
-Optim:  Adam (lr=1e-3, with cosine LR schedule)
+Optim:  Adam (lr=1e-3, weight_decay=1e-4, with cosine LR schedule)
 
 Usage:
   python train.py                          # train with defaults
@@ -11,7 +11,8 @@ Usage:
   python train.py --data data/games.jsonl # custom data file
 
 Output:
-  models/model.pt   — saved PyTorch model (used by export_weights.py)
+  models/model.pt       — saved PyTorch model (best validation loss)
+  models/model_latest.pt — saved PyTorch model (every 5 epochs)
 """
 
 import argparse
@@ -36,10 +37,12 @@ class ValueNet(nn.Module):
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(41, 128),
+            nn.Linear(21, 128),
             nn.ReLU(),
+            nn.BatchNorm1d(128),
             nn.Linear(128, 64),
             nn.ReLU(),
+            nn.BatchNorm1d(64),
             nn.Linear(64, 1),
             nn.Tanh(),
         )
@@ -52,26 +55,37 @@ class ValueNet(nn.Module):
 
 class GameDataset(Dataset):
     def __init__(self, path):
-        features = []
-        labels   = []
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(
                 f'{path} not found.\n'
-                f'Run: python generate_games.py  to create it first.'
+                f'Run: python generate_games.py to create it first.'
             )
+
+        # First pass: count lines to pre-allocate memory
+        print(f"Counting records in {path}...")
         with open(path) as f:
-            for line in f:
+            num_lines = sum(1 for line in f if line.strip())
+
+        # Pre-allocate numpy arrays
+        features = np.zeros((num_lines, 21), dtype=np.float32)
+        labels = np.zeros(num_lines, dtype=np.float32)
+
+        # Second pass: fill the arrays
+        print(f"Loading {num_lines:,} records...")
+        with open(path) as f:
+            for i, line in enumerate(f):
                 line = line.strip()
                 if not line:
                     continue
                 obj = json.loads(line)
-                features.append(obj['features'])
-                labels.append(obj['label'])
+                features[i] = obj['features']
+                labels[i] = obj['label']
 
-        self.X = torch.tensor(features, dtype=torch.float32)
-        self.y = torch.tensor(labels,   dtype=torch.float32)
-        print(f'Loaded {len(self.y):,} records from {path}')
+        self.X = torch.from_numpy(features)
+        self.y = torch.from_numpy(labels)
+        print(f'Finished loading data.')
+
 
     def __len__(self):
         return len(self.y)
@@ -88,7 +102,9 @@ def train(args):
     data_path  = Path(args.data) if args.data else script_dir / 'data' / 'games.jsonl'
     model_dir  = script_dir / 'models'
     model_dir.mkdir(exist_ok=True)
-    save_path  = model_dir / 'model.pt'
+    best_save_path = model_dir / 'model.pt'
+    latest_save_path = model_dir / 'model_latest.pt'
+
 
     # --- Dataset ---
     dataset  = GameDataset(data_path)
@@ -110,7 +126,7 @@ def train(args):
     print(f'Parameters: {n_params:,}')
 
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
     best_val_loss = math.inf
@@ -149,13 +165,16 @@ def train(args):
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), save_path)
+            torch.save(model.state_dict(), best_save_path)
+
+        if epoch % 5 == 0:
+            torch.save(model.state_dict(), latest_save_path)
 
         scheduler.step()
 
     elapsed = time.time() - start_time
     print(f'\nBest val loss: {best_val_loss:.5f}')
-    print(f'Saved best model to: {save_path}')
+    print(f'Saved best model to: {best_save_path}')
     print(f'Total time: {elapsed:.1f}s')
     print('\nNext step:  python export_weights.py')
 
@@ -164,14 +183,16 @@ def train(args):
 
 def main():
     parser = argparse.ArgumentParser(description='Train the Squirrel Oasis value network')
-    parser.add_argument('--data',       type=str,   default=None,
-                        help='Path to games.jsonl (default: data/games.jsonl)')
-    parser.add_argument('--epochs',     type=int,   default=30,
+    parser.add_argument('--data',         type=str,   default=None,
+                        help='Path to games.jsonl (default: training/data/games.jsonl)')
+    parser.add_argument('--epochs',       type=int,   default=30,
                         help='Number of training epochs (default: 30)')
-    parser.add_argument('--batch-size', type=int,   default=512,
-                        help='Batch size (default: 512)')
-    parser.add_argument('--lr',         type=float, default=1e-3,
+    parser.add_argument('--batch-size',   type=int,   default=1024,
+                        help='Batch size (default: 1024)')
+    parser.add_argument('--lr',           type=float, default=1e-3,
                         help='Initial learning rate (default: 0.001)')
+    parser.add_argument('--weight-decay', type=float, default=1e-4,
+                        help='Adam weight decay (default: 1e-4)')
     args = parser.parse_args()
     train(args)
 
