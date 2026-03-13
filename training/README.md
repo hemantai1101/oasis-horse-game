@@ -78,15 +78,16 @@ python training/export_weights.py
 
 ## State Representation
 
-Each board position is encoded as **21 floating-point numbers**:
+Each board position is encoded as **41 floating-point numbers**:
 
 ```
-Positions [0–9]:   P1 piece positions, sorted by (col, row)
-                   5 pieces × 2 values = (col-1)/10, (row-1)/10  ∈ [0, 1]
-Positions [10–19]: P2 piece positions, same format
-Position [20]:     Current player: 0.0 = P1's turn, 1.0 = P2's turn
+Positions [0–19]:  P1 piece positions, sorted by (col, row)
+                   10 pieces × 2 values = (col-1)/10, (row-1)/10  ∈ [0, 1]
+Positions [20–39]: P2 piece positions, same format
+Position [40]:     Current player: 0.0 = P1's turn, 1.0 = P2's turn
 ```
 
+Each player has **10 horses** across 2 corners (e.g. P1 = TL + BR corners, 5 horses each).
 Pieces are sorted so the same board state always produces the same feature vector,
 regardless of the order moves were made in history.
 
@@ -106,7 +107,7 @@ It replaces the handcrafted `evaluate()` in the minimax search as the leaf evalu
 ## Model Architecture
 
 ```
-Input (21) → Linear(128) + ReLU + BatchNorm → Linear(64) + ReLU + BatchNorm → Linear(1) + Tanh
+Input (41) → Linear(128) + ReLU + BatchNorm → Linear(64) + ReLU + BatchNorm → Linear(1) + Tanh
 ```
 
 Output is in **[−1, +1]**. Positive = good for the player to move; negative = bad.
@@ -208,6 +209,61 @@ Each iteration, the data generator (the model itself) improves, creating a
 positive feedback loop. This is the same principle as AlphaGo Zero and AlphaZero.
 
 **Expected strength:** Converges to near-optimal play for the game tree complexity.
+
+---
+
+## VM Commands (GCP — oasis-budget-worker)
+
+Use these when running generation on the cloud VM instead of locally.
+
+**SSH into the VM:**
+```bash
+gcloud compute ssh oasis-budget-worker \
+  --project=ff-ml-project \
+  --zone=us-central1-c \
+  --tunnel-through-iap
+```
+
+**Push local training folder to VM:**
+```bash
+gcloud compute scp \
+  --project=ff-ml-project \
+  --zone=us-central1-c \
+  --tunnel-through-iap \
+  --recurse ./training oasis-budget-worker:~/oasis-horse-game/
+```
+
+**Download generated data file from VM:**
+```bash
+gcloud compute scp \
+  oasis-budget-worker:/home/hemantai/oasis-horse-game/training/data/games.jsonl \
+  ./training/data/games_10000_3_.2_.15.jsonl \
+  --project=ff-ml-project \
+  --zone=us-central1-c \
+  --tunnel-through-iap
+```
+
+**Run generation inside screen (survives SSH disconnect):**
+```bash
+screen -S horse-training
+
+pypy3 training/generate_games.py \
+  --n-games 10000 \
+  --workers 7 \
+  --depth 3 \
+  --time-limit 0.2 \
+  --epsilon 0.15
+
+# Detach (keep running): Ctrl+A then D
+# Reattach later:        screen -r horse-training
+```
+
+**Verify file is fully written before downloading:**
+```bash
+wc -l /home/hemantai/oasis-horse-game/training/data/games.jsonl
+lsof   /home/hemantai/oasis-horse-game/training/data/games.jsonl
+# lsof should return nothing — if pypy3 still appears, generation is still running
+```
 
 ---
 
