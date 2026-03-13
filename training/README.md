@@ -220,9 +220,12 @@ positive feedback loop. This is the same principle as AlphaGo Zero and AlphaZero
 Use these when running generation on the cloud VM instead of locally.
 VM user: `trainer` | Instance: `oasis-budget-worker` | Project: `ff-ml-project` | Zone: `us-central1-c`
 
-> ⚠️ **Always use Ubuntu** (`ubuntu-2204-lts`) — NOT Debian. The `pypy3` apt package is broken on Debian and requires a manual workaround.
+> ⚠️ **Always use Ubuntu** (`ubuntu-2204-lts`) — NOT Debian. The `pypy3` apt package is broken on Debian and requires a manual tarball install.
 
-**Create the VM (run once):**
+---
+
+### Step 1 — Create the VM  *(run once, on your local machine)*
+
 ```bash
 gcloud compute instances create oasis-budget-worker \
   --project=ff-ml-project \
@@ -234,12 +237,10 @@ gcloud compute instances create oasis-budget-worker \
   --scopes=default
 ```
 
-**First-time VM setup (run once after creating the instance):**
-```bash
-sudo apt-get update && sudo apt-get install -y pypy3 screen
-```
+---
 
-**SSH into the VM:**
+### Step 2 — SSH into the VM  *(run on your local machine)*
+
 ```bash
 gcloud compute ssh trainer@oasis-budget-worker \
   --project=ff-ml-project \
@@ -247,7 +248,19 @@ gcloud compute ssh trainer@oasis-budget-worker \
   --tunnel-through-iap
 ```
 
-**Push local training folder to VM:**
+---
+
+### Step 3 — First-time VM setup  *(run once, inside the VM)*
+
+```bash
+sudo add-apt-repository universe
+sudo apt-get update && sudo apt-get install -y pypy3 screen
+```
+
+---
+
+### Step 4 — Push training code to VM  *(run on your local machine)*
+
 ```bash
 gcloud compute scp \
   --project=ff-ml-project \
@@ -256,17 +269,10 @@ gcloud compute scp \
   --recurse ./training trainer@oasis-budget-worker:~/oasis-horse-game/
 ```
 
-**Download generated data file from VM:**
-```bash
-gcloud compute scp \
-  trainer@oasis-budget-worker:/home/trainer/oasis-horse-game/training/data/games.jsonl \
-  ./training/data/games_10000_3_.2_.15.jsonl \
-  --project=ff-ml-project \
-  --zone=us-central1-c \
-  --tunnel-through-iap
-```
+---
 
-**Run generation inside screen (survives SSH disconnect):**
+### Step 5 — Run generation inside screen  *(run inside the VM)*
+
 ```bash
 screen -S horse-training
 
@@ -281,11 +287,35 @@ pypy3 training/generate_games.py \
 # Reattach later:        screen -r horse-training
 ```
 
-**Verify file is fully written before downloading:**
+---
+
+### Step 6 — Verify the file is fully written  *(run inside the VM)*
+
 ```bash
 wc -l /home/trainer/oasis-horse-game/training/data/games.jsonl
 lsof   /home/trainer/oasis-horse-game/training/data/games.jsonl
 # lsof should return nothing — if pypy3 still appears, generation is still running
+```
+
+---
+
+### Step 7 — Download the data file  *(run on your local machine)*
+
+```bash
+gcloud compute scp \
+  trainer@oasis-budget-worker:/home/trainer/oasis-horse-game/training/data/games.jsonl \
+  ./training/data/games_10000_3_.2_.15.jsonl \
+  --project=ff-ml-project \
+  --zone=us-central1-c \
+  --tunnel-through-iap
+```
+
+---
+
+### Step 8 — Verify the downloaded file  *(run on your local machine)*
+
+```bash
+python3 training/verify_data.py training/data/games_10000_3_.2_.15.jsonl
 ```
 
 ---
