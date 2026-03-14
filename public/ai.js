@@ -21,11 +21,20 @@ async function loadNNModel() {
   try {
     const resp = await fetch('model/weights.json');
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    NNWeights = await resp.json();
-    console.log('[AI] Neural net weights loaded.');
-    if (FORCE_HEURISTIC) {
+    const w = await resp.json();
+    if (!w.bn1_mean) {
+      console.warn('[AI] weights.json is missing BatchNorm params — re-run export_weights.py. ' +
+        'Falling back to heuristic evaluation.');
+    } else {
+      NNWeights = w;
+    }
+    if (!NNWeights) {
+      // weights loaded but incomplete
+    } else if (FORCE_HEURISTIC) {
+      console.log('[AI] Neural net weights loaded.');
       console.log('[AI] FORCE_HEURISTIC=true: using heuristic evaluation (NN ignored).');
     } else {
+      console.log('[AI] Neural net weights loaded.');
       console.log('[AI] Using NN evaluation.');
     }
   } catch (e) {
@@ -57,15 +66,26 @@ function nnLayer(x, W, b, activation) {
   });
 }
 
+// BatchNorm inference: y = (x - mean) / sqrt(var + eps) * gamma + beta
+function nnBatchNorm(x, mean, variance, gamma, beta, eps) {
+  return x.map((xi, i) => {
+    const xhat = (xi - mean[i]) / Math.sqrt(variance[i] + eps);
+    return gamma[i] * xhat + beta[i];
+  });
+}
+
 // Replace handcrafted evaluate() with neural net when weights are loaded.
 // Falls back to evaluate() if model is not yet loaded or FORCE_HEURISTIC is set.
 function nnEvaluate(snap) {
   if (!NNWeights || FORCE_HEURISTIC) return evaluate(snap);
 
-  const x  = stateToFeatures(snap);
-  const h1 = nnLayer(x,  NNWeights.W1, NNWeights.b1, 'relu');   // 41 -> 128
-  const h2 = nnLayer(h1, NNWeights.W2, NNWeights.b2, 'relu');   // 128 -> 64
-  const out = nnLayer(h2, NNWeights.W3, NNWeights.b3, 'tanh');  // 64 -> 1
+  const W = NNWeights;
+  const x   = stateToFeatures(snap);
+  const l1  = nnLayer(x,  W.W1, W.b1, 'relu');                                        // 41 -> 128
+  const bn1 = nnBatchNorm(l1, W.bn1_mean, W.bn1_var, W.bn1_gamma, W.bn1_beta, W.bn1_eps);
+  const l2  = nnLayer(bn1, W.W2, W.b2, 'relu');                                        // 128 -> 64
+  const bn2 = nnBatchNorm(l2, W.bn2_mean, W.bn2_var, W.bn2_gamma, W.bn2_beta, W.bn2_eps);
+  const out = nnLayer(bn2, W.W3, W.b3, 'tanh');                                        // 64 -> 1
 
   // out[0] in [-1, 1]: positive = good for the player to move.
   // Minimax always maximises for AIState.playerNumber, so orient the sign:

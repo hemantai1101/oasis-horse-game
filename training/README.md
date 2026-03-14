@@ -309,6 +309,90 @@ positive feedback loop. This is the same principle as AlphaGo Zero and AlphaZero
 
 ---
 
+## Automated GCP Workflow (fire-and-forget)
+
+Two scripts in `scripts/` let you kick off a generation run from your laptop
+and walk away. The VM starts, generates games, uploads to GCS, then shuts
+itself down automatically to avoid idle billing.
+
+### One-time setup
+
+**1. Create a GCS bucket** (run once from your local machine):
+```bash
+gsutil mb -l us-central1 gs://YOUR_BUCKET_NAME
+```
+
+**2. Grant the VM write access to the bucket:**
+```bash
+# Get the VM's service account email
+gcloud compute instances describe oasis-budget-worker \
+  --project=ff-ml-project --zone=us-central1-c \
+  --format='value(serviceAccounts[0].email)'
+
+# Grant Storage Object Admin on the bucket
+gsutil iam ch serviceAccount:SA_EMAIL:objectAdmin gs://YOUR_BUCKET_NAME
+```
+
+**3. Set your bucket name** in `scripts/generate_and_upload.sh`:
+```bash
+BUCKET="gs://YOUR_BUCKET_NAME/training-data"   # ← update this line
+```
+
+---
+
+### Running a generation job
+
+```bash
+# From your local machine — fire and forget
+bash scripts/launch_generation.sh
+```
+
+What happens next (unattended):
+1. VM starts
+2. `generate_and_upload.sh` is copied to the VM
+3. Generation begins in the background (`nohup`)
+4. Output is uploaded to GCS when done
+5. VM shuts itself down
+
+---
+
+### Monitoring a running job
+
+```bash
+gcloud compute ssh trainer@oasis-budget-worker \
+  --project=ff-ml-project --zone=us-central1-c --tunnel-through-iap \
+  --command="tail -f ~/generation.log"
+```
+
+---
+
+### Downloading the output
+
+After the VM shuts down, pull the file to your local machine:
+
+```bash
+gsutil cp gs://YOUR_BUCKET_NAME/training-data/games_50k_3_.2_.15.jsonl \
+  training/data/
+```
+
+Then verify and train as normal:
+```bash
+python3 training/verify_data.py training/data/games_50k_3_.2_.15.jsonl
+python3 training/train.py --data training/data/games_50k_3_.2_.15.jsonl \
+  --epochs 50 --batch-size 2048
+```
+
+---
+
+### Script reference
+
+| Script | Runs on | Purpose |
+|--------|---------|---------|
+| `scripts/launch_generation.sh` | Local machine | Starts VM, copies job script, triggers run |
+| `scripts/generate_and_upload.sh` | GCP VM | Generates games, uploads to GCS, shuts down VM |
+
+---
+
 ## VM Commands (GCP — oasis-budget-worker)
 
 Use these when running generation on the cloud VM instead of locally.
