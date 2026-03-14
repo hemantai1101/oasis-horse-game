@@ -151,6 +151,7 @@ function startGame() {
   GameState.currentPlayer = 1;
   GameState.winner = null;
   GameState.forfeitReason = null;
+  GameState.lastMove = null;
   placeInitialHorses();
   render();
 }
