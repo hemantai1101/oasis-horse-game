@@ -166,12 +166,14 @@ rooms/{code}/
 
 ## Timer Layout
 
-The `#timer-bar` lives **inside** `#status-bar` as a second row.
+The `#timer-bar` lives **inside** `#status-bar` as a `position: absolute; bottom: 0` strip.
 
-- **Hidden (non-MP):** `opacity:0; visibility:hidden` — space is always reserved, board never shifts
-- **Visible (MP playing):** `opacity:1`, `.hidden` class removed by `updateTimerUI()`
-- **Colors:** green (>50%) → `.timer-warning` orange (25–50%) → `.timer-danger` red (≤25%)
-- **`.my-turn` class** on `#timer-bar` brightens text color when it's your turn
+- **Design:** 4px thin red bar sitting at the very bottom edge of `#status-bar` (visually between header and game board)
+- **Hidden (non-MP):** `display: none` — absolutely positioned so hiding it causes zero layout shift
+- **Visible (MP playing):** `.hidden` removed by `updateTimerUI()`; bar shrinks from right to left as time passes
+- **Color:** always red (`#e53935`), `.timer-warning` and `.timer-danger` classes are still toggled by JS but all map to the same red
+- **Text labels** (`#timer-label`, `#timer-count`) kept in DOM for JS compatibility but hidden via CSS (`display: none`)
+- **`#status-bar`** has `position: relative` so the absolute timer anchors to it correctly
 
 ---
 

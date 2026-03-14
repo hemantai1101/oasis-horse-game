@@ -174,15 +174,15 @@ body {
 
 /* ===== Status Bar ===== */
 #status-bar {
+  position: relative;
   width: 100%;
   background: var(--status-bg);
   color: var(--status-text);
-  padding: 0.3rem 0.6rem 0;
+  padding: 0.3rem 0.6rem;
   font-size: clamp(0.68rem, 1.9vw, 0.84rem);
   text-align: center;
   min-height: 1.8rem;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0.3rem;
@@ -558,47 +558,39 @@ body {
 .slide-dot  { background: rgba(255, 230, 50, 0.85); }
 .knight-dot { background: rgba(180, 100, 255, 0.85); }
 
-/* ===== Timer Bar ===== */
+/* ===== Timer Bar — thin red progress strip at the bottom of status bar ===== */
 #timer-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.3rem 0.2rem;
-  width: 100%;
-  font-size: 0.78rem;
-  color: var(--muted-text);
-  transition: color 0.2s, opacity 0.3s;
-  opacity: 1;
+  padding: 0;
+  gap: 0;
+  background: rgba(255, 255, 255, 0.08);
 }
-/* Override .hidden for timer only — keep space reserved to prevent layout shift */
-#timer-bar.hidden {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-#timer-bar.my-turn { color: var(--control-text); }
-#timer-label { min-width: 100px; white-space: nowrap; }
+#timer-bar.hidden { display: none; }
+/* Text labels kept in DOM for JS compatibility but not shown */
+#timer-label, #timer-count { display: none; }
+#timer-bar.my-turn { /* no-op, class still toggled by JS */ }
 #timer-track {
   flex: 1;
-  height: 5px;
-  background: var(--timer-track-bg);
-  border-radius: 3px;
+  height: 100%;
+  background: transparent;
+  border-radius: 0;
   overflow: hidden;
 }
 #timer-fill {
   height: 100%;
   width: 100%;
-  background: #4caf50;
-  border-radius: 3px;
-  transition: width 0.9s linear, background 0.3s;
+  background: #e53935;
+  border-radius: 0;
+  transition: width 0.9s linear;
 }
-#timer-fill.timer-warning { background: #ff9800; }
-#timer-fill.timer-danger  { background: #f44336; }
-#timer-count {
-  min-width: 30px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
+/* Keep all danger/warning classes pointing to red so bar stays red throughout */
+#timer-fill.timer-warning { background: #e53935; }
+#timer-fill.timer-danger  { background: #e53935; }
 
 /* ===== Multiplayer Overlay UI ===== */
 .mode-buttons {
