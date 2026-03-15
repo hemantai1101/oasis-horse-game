@@ -192,7 +192,7 @@ Exported to: `public/model/weights.json`
 
 ---
 
-## Run 004 — *(pending)*
+## Run 004 — 2026-03-15
 
 **Goal:** Stronger teacher — regenerate 50k games at depth=4, retrain.
 
@@ -214,6 +214,77 @@ pypy3 training/generate_games.py \
 | depth | 4 | ↑ from 3 — stronger teacher |
 | time-limit | 0.5s | ↑ from 0.2s — depth-4 needs more time per move |
 | epsilon | 0.15 | Same |
+| augmentation | 2× | 180° rotation applied automatically |
+
+Games completed: 49,601 / 50,000 (399 skipped, 0.8%)
+Records written: 5,091,252
+Generation time: 90,234.6s (~25.1 hrs) — 0.55 games/s at depth=4
+
+### Training
+```bash
+python3 training/train.py \
+  --epochs 100 \
+  --batch-size 2048 \
+  --lr 1e-3 \
+  --weight-decay 1e-4 \
+  --data training/data/games_50k_4_.5_.15.jsonl
+```
+
+Best val loss: **0.70706** (epoch 100)
+Train loss at epoch 100: 0.70332
+Train/val gap: 0.00374 (no overfitting)
+Converged at epoch: **~95** — improvement epoch 95→100 only 0.00010, essentially flat
+Training time: 1904.3s (~32 min)
+
+Val loss curve (selected epochs):
+| Epoch | Train Loss | Val Loss |
+|-------|-----------|----------|
+| 1 | 0.82782 | 0.79051 |
+| 25 | 0.73032 | 0.73478 |
+| 50 | 0.71898 | 0.72482 |
+| 75 | 0.70849 | 0.71304 |
+| 90 | 0.70430 | 0.70771 |
+| 95 | 0.70366 | 0.70716 |
+| 100 | 0.70332 | 0.70706 |
+
+Notes:
+- ⚠️ Val loss (0.707) is **higher** than depth-3 runs (~0.608) — **not a regression**, see explanation below
+- Depth=4 labels encode deeper strategic value (4-ply lookahead vs 3-ply); harder to approximate from raw features
+- Model converged cleanly with no overfitting — train/val gap stable at ~0.003 throughout
+- Root cause: **model capacity** (14,081 params, 41→128→64→1) is too small for depth=4 function complexity
+- Cannot directly compare val loss to Run 003 — different data distribution, different difficulty
+- More epochs would not help — LR exhausted, model converged
+- **Next lever: widen architecture** → 41→256→128→1 (~43k params, 3× capacity) on same depth=4 data
+
+### Model
+Saved to: `training/models/model.pt` → back up as `training/models/model_run004.pt`
+Exported to: `public/model/weights.json`
+
+---
+
+## Run 005 — 2026-03-15
+
+**Goal:** Fix the capacity bottleneck identified in Run 004 — same depth=4 data, wider model.
+
+### What changed vs Run 004 (and why)
+
+| What | Run 004 | Run 005 | Why |
+|------|---------|---------|-----|
+| Architecture | 41→128→64→1 | 41→256→128→1 | Run 004 plateaued at 0.707 despite clean convergence — model too small to fit depth-4 complexity |
+| Params | 14,081 | ~44,545 | 3× more capacity to approximate the stronger depth-4 evaluation function |
+| Data | games_50k_4_.5_.15.jsonl | same | No change — data is not the bottleneck |
+| Epochs | 100 | 100 | No change — cosine schedule budget was sufficient in Run 004 |
+| Batch size | 2048 | 2048 | No change |
+| LR / weight decay | 1e-3 / 1e-4 | same | No change |
+
+**Diagnosis from Run 004:** Depth=4 minimax encodes 4-ply strategic lookahead into labels. The 14k-param model
+could not approximate this function — it converged at 0.707 with a hard floor, no overfitting.
+Widening the hidden layers (128→256, 64→128) gives the model more expressive power to capture
+the richer patterns in depth-4 data.
+
+### Data
+Same file as Run 004: `training/data/games_50k_4_.5_.15.jsonl`
+(49,601 games, 5,091,252 records, depth=4, time-limit=0.5s, epsilon=0.15)
 
 ### Training
 ```bash
@@ -229,8 +300,13 @@ Best val loss: *(pending)*
 Converged at epoch: *(pending)*
 Notes: *(pending)*
 
+### Expected outcome
+- If val loss drops below ~0.68: wider model meaningfully helped, depth-4 data is being better utilised
+- If val loss still plateaus ~0.70: feature representation is the bottleneck (not model size), need richer features
+- No overfitting expected — 5M records with weight_decay=1e-4 is strong regularisation
+
 ### Model
-Saved to: `training/models/model.pt`
+Saved to: `training/models/model.pt` → back up as `training/models/model_run005.pt`
 Exported to: `public/model/weights.json`
 
 ---
