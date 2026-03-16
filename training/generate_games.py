@@ -135,12 +135,12 @@ def apply_180_augmentation(examples):
 
 def _worker(args_tuple):
     """Worker function for multiprocessing — plays one game and returns examples."""
-    p1_mode, p2_mode, seed, depth, time_limit, epsilon = args_tuple
+    game_idx, p1_mode, p2_mode, seed, depth, time_limit, epsilon = args_tuple
     random.seed(seed)
     examples = play_game(p1_mode, p2_mode, depth, time_limit, epsilon)
     if examples is None:
-        return []
-    return examples + apply_180_augmentation(examples)
+        return game_idx, []
+    return game_idx, examples + apply_180_augmentation(examples)
 
 
 def main():
@@ -172,22 +172,46 @@ def main():
     work = []
     for i in range(args.n_games):
         p1_mode, p2_mode = random.choices(modes, weights=weights, k=1)[0]
-        work.append((p1_mode, p2_mode, args.seed + i, args.depth, args.time_limit, args.epsilon))
+        work.append((i, p1_mode, p2_mode, args.seed + i, args.depth, args.time_limit, args.epsilon))
 
-    n_games    = args.n_games
-    n_written  = 0
-    n_skipped  = 0
-    n_done     = 0
+    checkpoint_path = out_path.with_suffix('.checkpoint')
+
+    def load_checkpoint():
+        """Returns set of completed game indices, or None if no checkpoint (fresh start)."""
+        if checkpoint_path.exists() and out_path.exists():
+            with open(checkpoint_path) as f:
+                return set(json.load(f))
+        return None
+
+    def save_checkpoint(completed: set):
+        with open(checkpoint_path, 'w') as f:
+            json.dump(list(completed), f)
+
+    completed_indices = load_checkpoint()
+
+    if completed_indices is not None:
+        n_already_done = len(completed_indices)
+        work = [w for w in work if w[0] not in completed_indices]
+        file_mode = 'a'
+        print(f'Resuming: {n_already_done} games already done, {len(work)} remaining.')
+    else:
+        completed_indices = set()
+        file_mode = 'w'
+
+    n_games_total = args.n_games
+    n_done    = len(completed_indices)
+    n_written = 0
+    n_skipped = 0
     start_time = time.time()
 
-    print(f'Generating {n_games} games → {out_path}')
+    print(f'Generating {n_games_total} games → {out_path}')
     print(f'Using {args.workers} parallel workers')
     print(f'Depth: {args.depth}, Time Limit: {args.time_limit}s, Epsilon: {args.epsilon}')
     print('(Ctrl+C to stop early — partial output is still valid)\n')
 
-    with open(out_path, 'w') as f:
+    with open(out_path, file_mode) as f:
         with multiprocessing.Pool(processes=args.workers) as pool:
-            for examples in pool.imap_unordered(_worker, work):
+            for game_idx, examples in pool.imap_unordered(_worker, work):
                 n_done += 1
                 if not examples:
                     n_skipped += 1
@@ -195,14 +219,19 @@ def main():
                     for ex in examples:
                         f.write(json.dumps(ex) + '\n')
                         n_written += 1
+                    completed_indices.add(game_idx)
+
+                if n_done % 100 == 0:
+                    f.flush()
+                    save_checkpoint(completed_indices)
 
                 elapsed   = time.time() - start_time
                 rate      = n_done / elapsed if elapsed > 0 else 0
-                remaining = (n_games - n_done) / rate if rate > 0 else 0
-                pct       = n_done / n_games * 100
+                remaining = (n_games_total - n_done) / rate if rate > 0 else 0
+                pct       = n_done / n_games_total * 100
                 skip_pct  = n_skipped / n_done * 100 if n_done > 0 else 0
                 print(
-                    f'  [{pct:5.1f}%] game {n_done}/{n_games} | '
+                    f'  [{pct:5.1f}%] game {n_done}/{n_games_total} | '
                     f'skip {skip_pct:.0f}% | '
                     f'{n_written} records | '
                     f'{rate:.2f} games/s | '
@@ -210,10 +239,15 @@ def main():
                     end='\r', flush=True
                 )
 
+    # Clean up checkpoint — generation complete
+    if checkpoint_path.exists():
+        checkpoint_path.unlink()
+
     elapsed = time.time() - start_time
+    total_records = sum(1 for _ in open(out_path))
     print(f'\n\nDone in {elapsed:.1f}s')
-    print(f'  Games played:  {n_games - n_skipped} / {n_games} (skipped {n_skipped})')
-    print(f'  Records written: {n_written} (including 2× augmentation)')
+    print(f'  Games played:  {n_games_total - n_skipped} / {n_games_total} (skipped {n_skipped})')
+    print(f'  Records written: {total_records} (including 2× augmentation)')
     print(f'  Output: {out_path}')
 
 
