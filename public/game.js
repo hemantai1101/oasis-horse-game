@@ -151,6 +151,7 @@ function startGame() {
   GameState.currentPlayer = 1;
   GameState.winner = null;
   GameState.forfeitReason = null;
+  GameState.lastMove = null;
   placeInitialHorses();
   render();
 }
@@ -510,4 +511,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   initGame();
   if (typeof tryReconnect === 'function') tryReconnect();
+
+  // Re-render on resize so the board reflows to the new viewport width.
+  // CSS vw-based --cell-size auto-updates, but a render() call ensures the
+  // grid DOM is fresh and any layout quirks are resolved.
+  let _resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(render, 50);
+  });
 });
