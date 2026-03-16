@@ -151,22 +151,68 @@ def augment_horses_180(horses):
 
 # ===== Feature Extraction =====
 
-def state_to_features(horses, current_player):
+def state_to_features(horses, current_player, board=None):
     """
-    Encode a board position as a 41-element list of floats in [0, 1].
+    Encode a board position as a 105-element list of floats.
 
-    Layout:
-      [0..19]  P1 pieces sorted by (col, row): 10 × (col-1)/10, (row-1)/10
-      [20..39] P2 pieces sorted by (col, row): 10 × (col-1)/10, (row-1)/10
-      [40]     current player: 0.0 if P1, 1.0 if P2
+    Per horse × 20 horses = 100 features (P1 first, then P2, each sorted by col/row):
+      [base+0] col_norm        = (col - 1) / 10
+      [base+1] row_norm        = (row - 1) / 10
+      [base+2] dist_to_center  = (|col-6| + |row-6|) / 10
+      [base+3] on_axis         = 1.0 if col==6 or row==6, else 0.0
+      [base+4] path_clear      = 1.0 if on_axis AND no piece between horse and center
 
-    Each player has 10 horses across 2 corners (e.g. P1 = TL + BR corners).
+    Global features [100..104]:
+      [100] backstop (6,5) — +1.0=current player, -1.0=opponent, 0.0=empty
+      [101] backstop (6,7) — same
+      [102] backstop (5,6) — same
+      [103] backstop (7,6) — same
+      [104] player indicator — 0.0 if P1, 1.0 if P2
     """
+    if board is None:
+        board = horses_to_board(horses)
+
     p1 = sorted([h for h in horses if h['owner'] == 1], key=lambda h: (h['col'], h['row']))
     p2 = sorted([h for h in horses if h['owner'] == 2], key=lambda h: (h['col'], h['row']))
+
     feats = []
     for h in p1 + p2:
-        feats.append((h['col'] - 1) / 10.0)
-        feats.append((h['row'] - 1) / 10.0)
+        col, row = h['col'], h['row']
+
+        feats.append((col - 1) / 10.0)
+        feats.append((row - 1) / 10.0)
+        feats.append((abs(col - CENTER[0]) + abs(row - CENTER[1])) / 10.0)
+
+        on_axis = 1.0 if (col == CENTER[0] or row == CENTER[1]) else 0.0
+        feats.append(on_axis)
+
+        path_clear = 0.0
+        if on_axis:
+            if col == CENTER[0] and row == CENTER[1]:
+                path_clear = 1.0  # already at center (terminal state)
+            else:
+                dc = 0 if col == CENTER[0] else (1 if col < CENTER[0] else -1)
+                dr = 0 if row == CENTER[1] else (1 if row < CENTER[1] else -1)
+                c, r = col + dc, row + dr
+                clear = True
+                while (c, r) != CENTER:
+                    if (c, r) in board:
+                        clear = False
+                        break
+                    c += dc
+                    r += dr
+                path_clear = 1.0 if clear else 0.0
+        feats.append(path_clear)
+
+    # Backstop cells — sign relative to current player
+    for bs_col, bs_row in [(6, 5), (6, 7), (5, 6), (7, 6)]:
+        occupant = board.get((bs_col, bs_row))
+        if occupant is None:
+            feats.append(0.0)
+        elif occupant['owner'] == current_player:
+            feats.append(1.0)
+        else:
+            feats.append(-1.0)
+
     feats.append(0.0 if current_player == 1 else 1.0)
-    return feats  # length 41
+    return feats  # length 105

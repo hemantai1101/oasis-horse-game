@@ -26,9 +26,6 @@ Run these three commands from the **repository root** (or adjust paths according
 # 1. Generate self-play games  (~10–30 min for 10,000 games)
 python training/generate_games.py
 
-# 1b. Verify the generated data before training
-python3 training/verify_data.py training/data/games.jsonl
-
 # 2. Train the neural network  (~1–5 min)
 python training/train.py
 
@@ -76,7 +73,6 @@ python training/export_weights.py
 | `requirements.txt` | Python dependencies (torch, numpy) |
 | `data/` | Generated game records (gitignored — create by running generate_games.py) |
 | `models/` | Saved model checkpoints (gitignored) |
-| `verify_data.py` | Sanity-checks a `.jsonl` file — feature length, labels, augmentation pairs |
 
 ---
 
@@ -152,41 +148,30 @@ python3 training/train.py --epochs 50 --lr 5e-4 --weight-decay 1e-3
 
 ---
 
-### verify_data.py
-
-Sanity-checks a generated `.jsonl` file before training. Exits with code `0` on pass, `1` on failure — safe to chain in scripts.
-
-**Checks performed:**
-1. All feature vectors are length 41
-2. Labels are only `+1.0` or `−1.0`
-3. Record count is even (original + augmented pairs)
-4. Label distribution is roughly balanced (50/50)
-5. Every record has a valid 180° augmented counterpart in the file
-
-```bash
-# Basic usage
-python3 training/verify_data.py training/data/games.jsonl
-
-# Chain after download — stop pipeline if data is bad
-python3 training/verify_data.py training/data/games_10k.jsonl && python3 training/train.py
-```
-
----
-
 ## State Representation
 
-Each board position is encoded as **41 floating-point numbers**:
+Each board position is encoded as **105 floating-point numbers**:
 
 ```
-Positions [0–19]:  P1 piece positions, sorted by (col, row)
-                   10 pieces × 2 values = (col-1)/10, (row-1)/10  ∈ [0, 1]
-Positions [20–39]: P2 piece positions, same format
-Position [40]:     Current player: 0.0 = P1's turn, 1.0 = P2's turn
+Per horse × 20 horses = indices 0–99  (P1 first, then P2, each sorted by col/row):
+  base+0  col_norm        = (col - 1) / 10             ∈ [0, 1]
+  base+1  row_norm        = (row - 1) / 10             ∈ [0, 1]
+  base+2  dist_to_center  = (|col-6| + |row-6|) / 10  ∈ [0, 1]
+  base+3  on_axis         = 1.0 if col=6 or row=6      ∈ {0, 1}
+  base+4  path_clear      = 1.0 if on-axis with clear path to center  ∈ {0, 1}
+
+Global features [100–104]:
+  [100]  backstop (6,5)  +1.0=current player, -1.0=opponent, 0.0=empty
+  [101]  backstop (6,7)  same
+  [102]  backstop (5,6)  same
+  [103]  backstop (7,6)  same
+  [104]  player indicator: 0.0 = P1's turn, 1.0 = P2's turn
 ```
 
 Each player has **10 horses** across 2 corners (e.g. P1 = TL + BR corners, 5 horses each).
-Pieces are sorted so the same board state always produces the same feature vector,
-regardless of the order moves were made in history.
+Pieces are sorted so the same board state always produces the same feature vector.
+The backstop cells are the 4 cells adjacent to center — a horse needs to occupy one of these
+to stop an attacker from sliding through center (the win condition).
 
 ---
 
@@ -204,7 +189,7 @@ It replaces the handcrafted `evaluate()` in the minimax search as the leaf evalu
 ## Model Architecture
 
 ```
-Input (41) → Linear(128) + ReLU + BatchNorm → Linear(64) + ReLU + BatchNorm → Linear(1) + Tanh
+Input (105) → Linear(256) + ReLU + BatchNorm → Linear(128) + ReLU + BatchNorm → Linear(1) + Tanh
 ```
 
 Output is in **[−1, +1]**. Positive = good for the player to move; negative = bad.
@@ -375,9 +360,8 @@ gsutil cp gs://YOUR_BUCKET_NAME/training-data/games_50k_3_.2_.15.jsonl \
   training/data/
 ```
 
-Then verify and train as normal:
+Then train:
 ```bash
-python3 training/verify_data.py training/data/games_50k_3_.2_.15.jsonl
 python3 training/train.py --data training/data/games_50k_3_.2_.15.jsonl \
   --epochs 50 --batch-size 2048
 ```
@@ -489,12 +473,6 @@ gcloud compute scp \
 ```
 
 ---
-
-### Step 8 — Verify the downloaded file  *(run on your local machine)*
-
-```bash
-python3 training/verify_data.py training/data/games_10000_3_.2_.15.jsonl
-```
 
 ---
 

@@ -1,7 +1,7 @@
 """
 train.py — PyTorch training script for the Squirrel Oasis value network.
 
-Model:  Input(41) → Dense(256, ReLU) → BatchNorm → Dense(128, ReLU) → BatchNorm → Dense(1, Tanh)
+Model:  Input(105) → Dense(256, ReLU) → BatchNorm → Dense(128, ReLU) → BatchNorm → Dense(1, Tanh)
 Loss:   MSE
 Optim:  Adam (lr=1e-3, weight_decay=1e-4, with cosine LR schedule)
 
@@ -31,14 +31,14 @@ from torch.utils.data import Dataset, DataLoader, random_split
 
 class ValueNet(nn.Module):
     """
-    MLP: 41 inputs → 256 → 128 → 1 (tanh output in [-1, 1]).
+    MLP: 105 inputs → 256 → 128 → 1 (tanh output in [-1, 1]).
     Output = +1 means current player wins; -1 means current player loses.
-    Widened from 128→64 to 256→128 to handle depth-4 data complexity.
+    Input size increased from 41 to 105 with game-aware features (Run 006+).
     """
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(41, 256),
+            nn.Linear(105, 256),
             nn.ReLU(),
             nn.BatchNorm1d(256),
             nn.Linear(256, 128),
@@ -69,7 +69,7 @@ class GameDataset(Dataset):
             num_lines = sum(1 for line in f if line.strip())
 
         # Pre-allocate numpy arrays
-        features = np.zeros((num_lines, 41), dtype=np.float32)
+        features = np.zeros((num_lines, 105), dtype=np.float32)
         labels = np.zeros(num_lines, dtype=np.float32)
 
         # Second pass: fill the arrays

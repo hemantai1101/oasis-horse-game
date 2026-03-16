@@ -6,7 +6,7 @@
 // nnEvaluate() is used as the leaf evaluation function inside minimax instead
 // of the handcrafted evaluate().
 //
-// The model is a small MLP: Input(41) -> Dense(128, ReLU) -> Dense(64, ReLU) -> Dense(1, Tanh)
+// The model is a small MLP: Input(105) -> Dense(256, ReLU) -> Dense(128, ReLU) -> Dense(1, Tanh)
 // Output in [-1, +1]: positive = good for the player to move, negative = bad.
 //
 // If weights.json is absent, nnEvaluate() transparently falls back to evaluate().
@@ -44,18 +44,54 @@ async function loadNNModel() {
 }
 
 // Feature extraction -- mirrors state_to_features() in training/game.py
+// MUST stay in exact sync with game.py whenever features change.
 function stateToFeatures(snap) {
+  const board = snap.board;
   const p1 = snap.horses.filter(h => h.owner === 1)
     .sort((a, b) => a.col - b.col || a.row - b.row);
   const p2 = snap.horses.filter(h => h.owner === 2)
     .sort((a, b) => a.col - b.col || a.row - b.row);
+
   const feats = [];
   for (const h of [...p1, ...p2]) {
-    feats.push((h.col - 1) / 10);
-    feats.push((h.row - 1) / 10);
+    const col = h.col, row = h.row;
+
+    feats.push((col - 1) / 10);                                                   // col_norm
+    feats.push((row - 1) / 10);                                                   // row_norm
+    feats.push((Math.abs(col - CENTER.col) + Math.abs(row - CENTER.row)) / 10);  // dist_to_center
+
+    const onAxis = (col === CENTER.col || row === CENTER.row) ? 1.0 : 0.0;
+    feats.push(onAxis);                                                            // on_axis
+
+    let pathClear = 0.0;
+    if (onAxis) {
+      if (col === CENTER.col && row === CENTER.row) {
+        pathClear = 1.0;  // already at center (terminal state)
+      } else {
+        const dc = col === CENTER.col ? 0 : (col < CENTER.col ? 1 : -1);
+        const dr = row === CENTER.row ? 0 : (row < CENTER.row ? 1 : -1);
+        let c = col + dc, r = row + dr;
+        let clear = true;
+        while (!(c === CENTER.col && r === CENTER.row)) {
+          if (board[boardKey(c, r)]) { clear = false; break; }
+          c += dc; r += dr;
+        }
+        pathClear = clear ? 1.0 : 0.0;
+      }
+    }
+    feats.push(pathClear);                                                         // path_clear
   }
-  feats.push(snap.currentPlayer === 1 ? 0.0 : 1.0);
-  return feats;  // length 41 (10 pieces x 2 coords x 2 players + 1 player indicator)
+
+  // Backstop cells — sign relative to current player
+  // Order: (6,5), (6,7), (5,6), (7,6) — must match game.py exactly
+  const cp = snap.currentPlayer;
+  for (const [bc, br] of [[6,5],[6,7],[5,6],[7,6]]) {
+    const occ = board[boardKey(bc, br)];
+    feats.push(occ ? (occ.owner === cp ? 1.0 : -1.0) : 0.0);
+  }
+
+  feats.push(snap.currentPlayer === 1 ? 0.0 : 1.0);  // player indicator
+  return feats;  // length 105: 5 per horse × 20 horses + 4 backstop + 1 player
 }
 
 // One fully-connected layer: output[i] = activation(b[i] + sum_j W[i][j] * x[j])

@@ -64,7 +64,7 @@ def play_game(p1_mode, p2_mode, depth, time_limit, epsilon):
 
     for _ in range(MAX_MOVES):
         # Record position BEFORE the move
-        feats = state_to_features(horses, current_player)
+        feats = state_to_features(horses, current_player, board)
         history.append((feats, current_player))
 
         # Choose a move
@@ -101,20 +101,32 @@ def apply_180_augmentation(examples):
     Rotation: col → 12-col, row → 12-row.
     This preserves player-corner assignments (TL↔BR, TR↔BL stay with the same owner).
     Returns the augmented examples (original are NOT included — caller combines them).
+
+    Feature layout (105 total):
+      5 features per horse × 20 horses = indices 0..99
+        base+0: col_norm  → 1 - col_norm  (flip)
+        base+1: row_norm  → 1 - row_norm  (flip)
+        base+2: dist_to_center             (invariant — same distance after rotation)
+        base+3: on_axis                    (invariant — col=6 stays col=6 after rotation)
+        base+4: path_clear                 (invariant — symmetric board, path stays clear)
+      Backstop cells [100..103]:
+        (6,5) ↔ (6,7)  and  (5,6) ↔ (7,6)  under 180° rotation
+      Player indicator [104]: unchanged
     """
     augmented = []
     for ex in examples:
         feats = ex['features']
-        # features layout: [p1: 20 vals][p2: 20 vals][player: 1 val]
-        # each pair (col_norm, row_norm) where col_norm = (col-1)/10
-        # rotation: col → (12-col), so col_norm' = (12 - (col_norm*10+1) - 1)/10
-        #         = (10 - col_norm*10)/10 = 1 - col_norm
-        # same for row_norm
         new_feats = list(feats)
-        for i in range(0, 40, 2):      # 20 pairs in positions [0..39] (10 P1 + 10 P2 horses)
-            new_feats[i]   = 1.0 - feats[i]    # col
-            new_feats[i+1] = 1.0 - feats[i+1]  # row
-        # player indicator stays the same (rotation doesn't change whose turn it is)
+        for i in range(20):                    # 20 horses × 5 features each
+            base = i * 5
+            new_feats[base]   = 1.0 - feats[base]    # col_norm: flip
+            new_feats[base+1] = 1.0 - feats[base+1]  # row_norm: flip
+            # dist_to_center [base+2], on_axis [base+3], path_clear [base+4]: unchanged
+        new_feats[100] = feats[101]            # backstop (6,5) ← (6,7)
+        new_feats[101] = feats[100]            # backstop (6,7) ← (6,5)
+        new_feats[102] = feats[103]            # backstop (5,6) ← (7,6)
+        new_feats[103] = feats[102]            # backstop (7,6) ← (5,6)
+        # new_feats[104] (player indicator): unchanged
         augmented.append({'features': new_feats, 'label': ex['label']})
     return augmented
 
