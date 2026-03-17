@@ -50,6 +50,14 @@ let GameState = {
 };
 
 
+// ===== Haptic Feedback =====
+
+function vibrate(pattern) {
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate(pattern); } catch (_) {}
+  }
+}
+
 // ===== Utility Functions =====
 
 function getZone(col, row) {
@@ -254,12 +262,14 @@ function handleCellClick(col, row) {
     }
   }
 
+  vibrate(8);
   deselectHorse();
 }
 
 function selectHorse(horse) {
   GameState.selectedHorse = horse;
   GameState.validMoves = getValidMoves(horse);
+  vibrate(15);
   posthog.capture('piece_selected', {
     player: PLAYER_NAME[horse.owner],
     from: { col: horse.col, row: horse.row },
@@ -298,6 +308,7 @@ function executeMove(horse, move) {
 
   const isWin = move.col === CENTER.col && move.row === CENTER.row;
   if (isWin) {
+    vibrate([60, 30, 60]);
     GameState.winner = GameState.currentPlayer;
     GameState.selectedHorse = null;
     GameState.validMoves = [];
@@ -308,6 +319,7 @@ function executeMove(horse, move) {
     });
     if (MultiplayerState.roomCode) pushGameState(null);
   } else {
+    vibrate(20);
     GameState.selectedHorse = null;
     GameState.validMoves = [];
     GameState.currentPlayer = GameState.currentPlayer === 1 ? 2 : 1;
@@ -582,6 +594,35 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   initGame();
   if (typeof tryReconnect === 'function') tryReconnect();
+
+  // ===== Mobile touch visual feedback =====
+  // Uses event delegation on #board so it survives renderBoard() DOM rebuilds.
+  const boardEl = document.getElementById('board');
+  let _touchTarget = null;
+
+  boardEl.addEventListener('touchstart', e => {
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    _touchTarget = cell;
+    cell.classList.add('touching');
+    const horse = cell.querySelector('.horse');
+    if (horse) horse.classList.add('touching');
+  }, { passive: true });
+
+  function _onTouchEnd() {
+    if (!_touchTarget) return;
+    const cell = _touchTarget;
+    _touchTarget = null;
+    // Small delay so the flash is visible even on very quick taps
+    setTimeout(() => {
+      cell.classList.remove('touching');
+      const horse = cell.querySelector('.horse');
+      if (horse) horse.classList.remove('touching');
+    }, 120);
+  }
+
+  boardEl.addEventListener('touchend',    _onTouchEnd, { passive: true });
+  boardEl.addEventListener('touchcancel', _onTouchEnd, { passive: true });
 
   // Re-render on resize so the board reflows to the new viewport width.
   // CSS vw-based --cell-size auto-updates, but a render() call ensures the
