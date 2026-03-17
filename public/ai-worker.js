@@ -93,6 +93,67 @@ function applyMove(snap, horseId, move) {
   };
 }
 
+// ===== Feature Extraction Helpers =====
+
+function countWinningThreats(horses, board, player) {
+  let count = 0;
+  for (const h of horses) {
+    const col = h.col, row = h.row;
+    if (col === CENTER.col && row === CENTER.row) continue;
+    if (col !== CENTER.col && row !== CENTER.row) continue;
+    const dc = col === CENTER.col ? 0 : (col < CENTER.col ? 1 : -1);
+    const dr = row === CENTER.row ? 0 : (row < CENTER.row ? 1 : -1);
+    let c = col + dc, r = row + dr;
+    let clear = true;
+    while (!(c === CENTER.col && r === CENTER.row)) {
+      if (board[boardKey(c, r)]) { clear = false; break; }
+      c += dc; r += dr;
+    }
+    if (!clear) continue;
+    let bs;
+    if (col === CENTER.col) {
+      bs = row < CENTER.row ? { col: 6, row: 7 } : { col: 6, row: 5 };
+    } else {
+      bs = col < CENTER.col ? { col: 7, row: 6 } : { col: 5, row: 6 };
+    }
+    const occ = board[boardKey(bs.col, bs.row)];
+    if (occ && occ.owner === player) count++;
+  }
+  return count;
+}
+
+function isInHome(h, player) {
+  const col = h.col, row = h.row;
+  if (player === 1) return (col <= 3 && row <= 3) || (col >= 9 && row >= 9);
+  else              return (col >= 9 && row <= 3) || (col <= 3 && row >= 9);
+}
+
+function countPiecesBlockingOpp(myHorses, oppHorses) {
+  let blocking = 0;
+  for (const my of myHorses) {
+    const mc = my.col, mr = my.row;
+    if (mc !== CENTER.col && mr !== CENTER.row) continue;
+    if (mc === CENTER.col && mr === CENTER.row) continue;
+    let isBlocking = false;
+    for (const opp of oppHorses) {
+      const oc = opp.col, or_ = opp.row;
+      if (mc === CENTER.col && oc === CENTER.col) {
+        if (or_ === CENTER.row) continue;
+        if ((mr < CENTER.row) === (or_ < CENTER.row)) {
+          if (Math.abs(mr - CENTER.row) < Math.abs(or_ - CENTER.row)) { isBlocking = true; break; }
+        }
+      } else if (mr === CENTER.row && or_ === CENTER.row) {
+        if (oc === CENTER.col) continue;
+        if ((mc < CENTER.col) === (oc < CENTER.col)) {
+          if (Math.abs(mc - CENTER.col) < Math.abs(oc - CENTER.col)) { isBlocking = true; break; }
+        }
+      }
+    }
+    if (isBlocking) blocking++;
+  }
+  return blocking;
+}
+
 // ===== Threat Analysis =====
 
 function pathClear(fromHorse, board) {
@@ -133,23 +194,23 @@ function stateToFeatures(snap) {
     const onAxis = (col === CENTER.col || row === CENTER.row) ? 1.0 : 0.0;
     feats.push(onAxis);                                                            // on_axis
 
-    let pathClear = 0.0;
+    let pathThreat = 0.0;
     if (onAxis) {
       if (col === CENTER.col && row === CENTER.row) {
-        pathClear = 1.0;  // already at center (terminal state)
+        pathThreat = 1.0;  // already at center (terminal state)
       } else {
         const dc = col === CENTER.col ? 0 : (col < CENTER.col ? 1 : -1);
         const dr = row === CENTER.row ? 0 : (row < CENTER.row ? 1 : -1);
         let c = col + dc, r = row + dr;
-        let clear = true;
+        let blocks = 0;
         while (!(c === CENTER.col && r === CENTER.row)) {
-          if (board[boardKey(c, r)]) { clear = false; break; }
+          if (board[boardKey(c, r)]) blocks++;
           c += dc; r += dr;
         }
-        pathClear = clear ? 1.0 : 0.0;
+        pathThreat = Math.max(0.0, (5 - blocks) / 5.0);
       }
     }
-    feats.push(pathClear);                                                         // path_clear
+    feats.push(pathThreat);                                                        // path_threat
   }
 
   // Backstop cells — sign relative to current player
@@ -160,8 +221,20 @@ function stateToFeatures(snap) {
     feats.push(occ ? (occ.owner === cp ? 1.0 : -1.0) : 0.0);
   }
 
-  feats.push(snap.currentPlayer === 1 ? 0.0 : 1.0);  // player indicator
-  return feats;  // length 105: 5 per horse × 20 horses + 4 backstop + 1 player
+  feats.push(snap.currentPlayer === 1 ? 0.0 : 1.0);  // player indicator [104]
+
+  // New global features [105..109]
+  const opp = 3 - cp;
+  const myHorses  = snap.horses.filter(h => h.owner === cp);
+  const oppHorses = snap.horses.filter(h => h.owner === opp);
+
+  feats.push(countWinningThreats(myHorses,  board, cp)  / 10.0);  // [105] my_winning_threats
+  feats.push(countWinningThreats(oppHorses, board, opp) / 10.0);  // [106] opp_winning_threats
+  feats.push(myHorses.filter(h  => isInHome(h, cp)).length  / 10.0); // [107] my_horses_at_home
+  feats.push(oppHorses.filter(h => isInHome(h, opp)).length / 10.0); // [108] opp_horses_at_home
+  feats.push(countPiecesBlockingOpp(myHorses, oppHorses) / 10.0);    // [109] my_pieces_blocking_opp
+
+  return feats;  // length 110: 5 per horse × 20 horses + 4 backstop + 1 player + 5 global
 }
 
 function nnLayer(x, W, b, activation) {
@@ -183,7 +256,7 @@ function nnEvaluate(snap) {
   if (!NNWeights || FORCE_HEURISTIC) return evaluate(snap);
   const W   = NNWeights;
   const x   = stateToFeatures(snap);
-  const l1  = nnLayer(x,  W.W1, W.b1, 'relu');                                        // 105 -> 256
+  const l1  = nnLayer(x,  W.W1, W.b1, 'relu');                                        // 110 -> 256
   const bn1 = nnBatchNorm(l1, W.bn1_mean, W.bn1_var, W.bn1_gamma, W.bn1_beta, W.bn1_eps);
   const l2  = nnLayer(bn1, W.W2, W.b2, 'relu');                                        // 256 -> 128
   const bn2 = nnBatchNorm(l2, W.bn2_mean, W.bn2_var, W.bn2_gamma, W.bn2_beta, W.bn2_eps);

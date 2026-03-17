@@ -13,7 +13,8 @@ Master summary of all training runs. **Full details in `training/runs/run_NNN.md
 | [003](runs/run_003.md) | 2026-03-14 | 50k games, depth=3 | 41 | 41→128→64→1 | 0.60809 | ✅ Exported & tested | 100 epochs (converged) |
 | [004](runs/run_004.md) | 2026-03-15 | 50k games, depth=4 | 41 | 41→128→64→1 | 0.70706 | ❌ Superseded | depth=4 teacher |
 | [005](runs/run_005.md) | 2026-03-15 | 50k games, depth=4 | 41 | 41→256→128→1 | 0.69068 | ✅ Exported & tested | 3× wider model |
-| [006](runs/run_006.md) | 2026-03-17 | 50k games, depth=4 | **105** | 105→256→128→1 | **0.62254** | ✅ Trained, pending export | **Feature engineering** |
+| [006](runs/run_006.md) | 2026-03-17 | 50k games, depth=4 | **105** | 105→256→128→1 | **0.62254** | ✅ Exported & tested | **Feature engineering** |
+| [007](runs/run_007.md) | 2026-03-18 | 50k games, depth=4 | **110** | 110→256→128→1 | TBD | 🔄 In progress | **Explicit threat features** |
 
 ---
 
@@ -26,6 +27,7 @@ Run 003  Converge:  depth-3, 50k, narrow   → 0.608  ← Ceiling for depth-3 + 
 Run 004  Stronger teacher: depth-4, narrow → 0.707  Model too small for depth-4 complexity
 Run 005  Wider model: depth-4, wide        → 0.691  ← Ceiling for 41 raw position features
 Run 006  Feature engineering: depth-4, 105 → 0.622  ← Biggest jump yet (+0.069 vs Run 005)
+Run 007  Explicit threats:   depth-4, 110 → TBD    ← path_threat graded + winning_threats + phase
 ```
 
 ---
@@ -47,13 +49,16 @@ Run 006  Feature engineering: depth-4, 105 → 0.622  ← Biggest jump yet (+0.0
 | Version | Feature Count | Description |
 |---------|--------------|-------------|
 | v1 (Runs 001–005) | 41 | Raw (col, row) per horse + player indicator |
-| v2 (Run 006+) | 105 | + dist to center, on-axis flag, path-clear flag, 4 backstop cells |
+| v2 (Run 006) | 105 | + dist to center, on-axis flag, path-clear flag, 4 backstop cells |
+| v3 (Run 007+) | 110 | + path_threat graded, my/opp winning threats, at-home counts, blocking count |
 
 ---
 
 ## Current Best Model
 
-**Run 006** — `training/models/model_run006.pt` / `public/model/weights.json`
-- Architecture: 105→256→128→1 (60,929 params)
-- Val loss: 0.62254
-- In-game: *(pending export & test)*
+**Run 007** — `training/models/model_run007.pt` / `public/model/weights.json` *(pending)*
+- Architecture: 110→256→128→1 (~62,000 params)
+- Val loss: TBD
+- In-game: *(pending generation + training)*
+
+Previous best: **Run 006** — val loss 0.62254, 105→256→128→1

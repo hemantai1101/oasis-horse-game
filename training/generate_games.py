@@ -102,16 +102,17 @@ def apply_180_augmentation(examples):
     This preserves player-corner assignments (TL↔BR, TR↔BL stay with the same owner).
     Returns the augmented examples (original are NOT included — caller combines them).
 
-    Feature layout (105 total):
+    Feature layout (110 total):
       5 features per horse × 20 horses = indices 0..99
         base+0: col_norm  → 1 - col_norm  (flip)
         base+1: row_norm  → 1 - row_norm  (flip)
         base+2: dist_to_center             (invariant — same distance after rotation)
         base+3: on_axis                    (invariant — col=6 stays col=6 after rotation)
-        base+4: path_clear                 (invariant — symmetric board, path stays clear)
+        base+4: path_threat                (invariant — symmetric board, block count unchanged)
       Backstop cells [100..103]:
         (6,5) ↔ (6,7)  and  (5,6) ↔ (7,6)  under 180° rotation
       Player indicator [104]: unchanged
+      New global features [105..109]: all invariant under 180° rotation — unchanged
     """
     augmented = []
     for ex in examples:
@@ -121,12 +122,13 @@ def apply_180_augmentation(examples):
             base = i * 5
             new_feats[base]   = 1.0 - feats[base]    # col_norm: flip
             new_feats[base+1] = 1.0 - feats[base+1]  # row_norm: flip
-            # dist_to_center [base+2], on_axis [base+3], path_clear [base+4]: unchanged
+            # dist_to_center [base+2], on_axis [base+3], path_threat [base+4]: unchanged
         new_feats[100] = feats[101]            # backstop (6,5) ← (6,7)
         new_feats[101] = feats[100]            # backstop (6,7) ← (6,5)
         new_feats[102] = feats[103]            # backstop (5,6) ← (7,6)
         new_feats[103] = feats[102]            # backstop (7,6) ← (5,6)
         # new_feats[104] (player indicator): unchanged
+        # new_feats[105..109] (winning threats, at-home counts, blocking count): all invariant
         augmented.append({'features': new_feats, 'label': ex['label']})
     return augmented
 
