@@ -367,6 +367,32 @@ body {
   box-shadow: 0 0 0 3px gold, 3px 3px 0 rgba(0,0,0,0.5) !important;
 }
 
+/* ===== Mobile Touch Feedback =====
+   .touching is added/removed by touchstart/touchend in game.js. */
+
+/* Cell tap — immediate brightness flash */
+.cell.touching {
+  animation: cell-tap-flash 0.18s ease-out forwards;
+}
+/* Valid-move cell tap — brighter, more obvious confirmation */
+.cell.valid-move.touching {
+  animation: cell-tap-flash-valid 0.18s ease-out forwards;
+}
+/* Piece tap — scale-press like a physical button */
+.horse.touching {
+  transform: scale(0.86) !important;
+  transition: transform 0.08s ease-out !important;
+}
+
+@keyframes cell-tap-flash {
+  0%   { filter: brightness(1.40); }
+  100% { filter: brightness(1.00); }
+}
+@keyframes cell-tap-flash-valid {
+  0%   { filter: brightness(1.60); }
+  100% { filter: brightness(1.10); }
+}
+
 /* ===== Piece movement & selection animations ===== */
 @keyframes horse-select {
   0%   { transform: scale(1); }
