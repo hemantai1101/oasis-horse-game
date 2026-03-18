@@ -21,6 +21,7 @@ import json
 import multiprocessing
 import os
 import random
+import signal
 import sys
 import time
 from pathlib import Path
@@ -210,6 +211,14 @@ def main():
     print('(Ctrl+C to stop early — partial output is still valid)\n')
 
     interrupted = False
+
+    def _handle_sigterm(signum, frame):
+        # Convert SIGTERM (system shutdown, kill, etc.) into KeyboardInterrupt
+        # so the existing cleanup block in the pool loop handles it uniformly.
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+
     with open(out_path, file_mode) as f:
         pool = multiprocessing.Pool(processes=args.workers)
         try:
