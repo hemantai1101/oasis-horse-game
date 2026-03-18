@@ -194,23 +194,23 @@ function stateToFeatures(snap) {
     const onAxis = (col === CENTER.col || row === CENTER.row) ? 1.0 : 0.0;
     feats.push(onAxis);                                                            // on_axis
 
-    let pathThreat = 0.0;
+    let pathClear = 0.0;
     if (onAxis) {
       if (col === CENTER.col && row === CENTER.row) {
-        pathThreat = 1.0;  // already at center (terminal state)
+        pathClear = 1.0;  // already at center (terminal state)
       } else {
         const dc = col === CENTER.col ? 0 : (col < CENTER.col ? 1 : -1);
         const dr = row === CENTER.row ? 0 : (row < CENTER.row ? 1 : -1);
         let c = col + dc, r = row + dr;
-        let blocks = 0;
+        let clear = true;
         while (!(c === CENTER.col && r === CENTER.row)) {
-          if (board[boardKey(c, r)]) blocks++;
+          if (board[boardKey(c, r)]) { clear = false; break; }
           c += dc; r += dr;
         }
-        pathThreat = Math.max(0.0, (5 - blocks) / 5.0);
+        pathClear = clear ? 1.0 : 0.0;
       }
     }
-    feats.push(pathThreat);                                                        // path_threat
+    feats.push(pathClear);                                                         // path_clear
   }
 
   // Backstop cells — sign relative to current player
@@ -228,11 +228,11 @@ function stateToFeatures(snap) {
   const myHorses  = snap.horses.filter(h => h.owner === cp);
   const oppHorses = snap.horses.filter(h => h.owner === opp);
 
-  feats.push(countWinningThreats(myHorses,  board, cp)  / 10.0);  // [105] my_winning_threats
-  feats.push(countWinningThreats(oppHorses, board, opp) / 10.0);  // [106] opp_winning_threats
+  feats.push(countWinningThreats(myHorses,  board, cp)  / 2.0);   // [105] my_winning_threats
+  feats.push(countWinningThreats(oppHorses, board, opp) / 2.0);   // [106] opp_winning_threats
   feats.push(myHorses.filter(h  => isInHome(h, cp)).length  / 10.0); // [107] my_horses_at_home
   feats.push(oppHorses.filter(h => isInHome(h, opp)).length / 10.0); // [108] opp_horses_at_home
-  feats.push(countPiecesBlockingOpp(myHorses, oppHorses) / 10.0);    // [109] my_pieces_blocking_opp
+  feats.push(countPiecesBlockingOpp(myHorses, oppHorses) / 5.0);     // [109] my_pieces_blocking_opp
 
   return feats;  // length 110: 5 per horse × 20 horses + 4 backstop + 1 player + 5 global
 }

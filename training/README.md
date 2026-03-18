@@ -158,8 +158,7 @@ Per horse × 20 horses = indices 0–99  (P1 first, then P2, each sorted by col/
   base+1  row_norm        = (row - 1) / 10             ∈ [0, 1]
   base+2  dist_to_center  = (|col-6| + |row-6|) / 10  ∈ [0, 1]
   base+3  on_axis         = 1.0 if col=6 or row=6      ∈ {0, 1}
-  base+4  path_threat     = graded 0.0–1.0: max(0,(5-blocks)/5) if on_axis, else 0.0
-                            1.0=clear, 0.8=1 blocker, 0.6=2 blockers, 0.0=not on axis
+  base+4  path_clear      = 1.0 if on_axis AND path to center fully clear, else 0.0
 
 Global features [100–109]:
   [100]  backstop (6,5)  +1.0=current player, -1.0=opponent, 0.0=empty
@@ -167,11 +166,11 @@ Global features [100–109]:
   [102]  backstop (5,6)  same
   [103]  backstop (7,6)  same
   [104]  player indicator: 0.0 = P1's turn, 1.0 = P2's turn
-  [105]  my_winning_threats / 10   — horses with on_axis + clear path + my backstop set
-  [106]  opp_winning_threats / 10  — same for opponent
-  [107]  my_horses_at_home / 10    — my pieces still in starting corner regions
-  [108]  opp_horses_at_home / 10   — opponent pieces still in starting corners
-  [109]  my_pieces_blocking_opp / 10 — my axis pieces blocking an opp piece further back
+  [105]  my_winning_threats  / 2   — horses with on_axis + clear path + my backstop set
+  [106]  opp_winning_threats / 2   — same for opponent
+  [107]  my_horses_at_home   / 10  — my pieces still in starting corner regions
+  [108]  opp_horses_at_home  / 10  — opponent pieces still in starting corners
+  [109]  my_pieces_blocking_opp / 5 — my axis pieces blocking an opp piece further back
 ```
 
 Each player has **10 horses** across 2 corners (e.g. P1 = TL + BR corners, 5 horses each).

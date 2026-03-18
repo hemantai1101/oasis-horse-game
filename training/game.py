@@ -236,8 +236,7 @@ def state_to_features(horses, current_player, board=None):
       [base+1] row_norm        = (row - 1) / 10
       [base+2] dist_to_center  = (|col-6| + |row-6|) / 10
       [base+3] on_axis         = 1.0 if col==6 or row==6, else 0.0
-      [base+4] path_threat     = graded 0.0–1.0: max(0, (5-blocks)/5) if on_axis, else 0.0
-                                  1.0=clear path, 0.8=1 blocker, 0.6=2 blockers, 0.0=not on axis
+      [base+4] path_clear      = 1.0 if on_axis AND path to center is fully clear, else 0.0
 
     Global features [100..109]:
       [100] backstop (6,5) — +1.0=current player, -1.0=opponent, 0.0=empty
@@ -245,11 +244,11 @@ def state_to_features(horses, current_player, board=None):
       [102] backstop (5,6) — same
       [103] backstop (7,6) — same
       [104] player indicator — 0.0 if P1, 1.0 if P2
-      [105] my_winning_threats  / 10  — horses with on_axis + clear path + backstop set by me
-      [106] opp_winning_threats / 10  — same for opponent
+      [105] my_winning_threats  / 2   — horses with on_axis + clear path + backstop set by me
+      [106] opp_winning_threats / 2   — same for opponent
       [107] my_horses_at_home   / 10  — my pieces still in starting corner regions
       [108] opp_horses_at_home  / 10  — opponent pieces still in starting corner regions
-      [109] my_pieces_blocking_opp / 10 — my axis pieces blocking an opp piece further back
+      [109] my_pieces_blocking_opp / 5 — my axis pieces blocking an opp piece further back
     """
     if board is None:
         board = horses_to_board(horses)
@@ -268,22 +267,23 @@ def state_to_features(horses, current_player, board=None):
         on_axis = 1.0 if (col == CENTER[0] or row == CENTER[1]) else 0.0
         feats.append(on_axis)
 
-        path_threat = 0.0
+        path_clear = 0.0
         if on_axis:
             if col == CENTER[0] and row == CENTER[1]:
-                path_threat = 1.0  # already at center (terminal state)
+                path_clear = 1.0  # already at center (terminal state)
             else:
                 dc = 0 if col == CENTER[0] else (1 if col < CENTER[0] else -1)
                 dr = 0 if row == CENTER[1] else (1 if row < CENTER[1] else -1)
                 c, r = col + dc, row + dr
-                blocks = 0
+                clear = True
                 while (c, r) != CENTER:
                     if (c, r) in board:
-                        blocks += 1
+                        clear = False
+                        break
                     c += dc
                     r += dr
-                path_threat = max(0.0, (5 - blocks) / 5.0)
-        feats.append(path_threat)
+                path_clear = 1.0 if clear else 0.0
+        feats.append(path_clear)
 
     # Backstop cells — sign relative to current player
     for bs_col, bs_row in [(6, 5), (6, 7), (5, 6), (7, 6)]:
@@ -302,10 +302,10 @@ def state_to_features(horses, current_player, board=None):
     my_horses  = [h for h in horses if h['owner'] == current_player]
     opp_horses = [h for h in horses if h['owner'] == opp_player]
 
-    feats.append(count_winning_threats(my_horses,  board, current_player) / 10.0)   # [105]
-    feats.append(count_winning_threats(opp_horses, board, opp_player)     / 10.0)   # [106]
+    feats.append(count_winning_threats(my_horses,  board, current_player) / 2.0)    # [105]
+    feats.append(count_winning_threats(opp_horses, board, opp_player)     / 2.0)    # [106]
     feats.append(sum(1 for h in my_horses  if is_in_home(h, current_player)) / 10.0) # [107]
     feats.append(sum(1 for h in opp_horses if is_in_home(h, opp_player))     / 10.0) # [108]
-    feats.append(count_pieces_blocking_opp(my_horses, opp_horses)             / 10.0) # [109]
+    feats.append(count_pieces_blocking_opp(my_horses, opp_horses)             / 5.0)  # [109]
 
     return feats  # length 110

@@ -109,7 +109,7 @@ def apply_180_augmentation(examples):
         base+1: row_norm  → 1 - row_norm  (flip)
         base+2: dist_to_center             (invariant — same distance after rotation)
         base+3: on_axis                    (invariant — col=6 stays col=6 after rotation)
-        base+4: path_threat                (invariant — symmetric board, block count unchanged)
+        base+4: path_clear                 (invariant — binary clear/blocked, rotation unchanged)
       Backstop cells [100..103]:
         (6,5) ↔ (6,7)  and  (5,6) ↔ (7,6)  under 180° rotation
       Player indicator [104]: unchanged
