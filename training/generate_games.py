@@ -199,11 +199,12 @@ def main():
         completed_indices = set()
         file_mode = 'w'
 
-    n_games_total = args.n_games
-    n_done    = len(completed_indices)
-    n_written = 0
-    n_skipped = 0
-    start_time = time.time()
+    n_games_total  = args.n_games
+    n_done         = len(completed_indices)
+    n_done_session = 0   # games completed in this session only (for accurate rate)
+    n_written      = 0
+    n_skipped      = 0
+    start_time     = time.time()
 
     print(f'Generating {n_games_total} games → {out_path}')
     print(f'Using {args.workers} parallel workers')
@@ -224,6 +225,7 @@ def main():
         try:
             for game_idx, examples in pool.imap_unordered(_worker, work):
                 n_done += 1
+                n_done_session += 1
                 if not examples:
                     n_skipped += 1
                 else:
@@ -237,7 +239,7 @@ def main():
                     save_checkpoint(completed_indices)
 
                 elapsed   = time.time() - start_time
-                rate      = n_done / elapsed if elapsed > 0 else 0
+                rate      = n_done_session / elapsed if elapsed > 0 else 0
                 remaining = (n_games_total - n_done) / rate if rate > 0 else 0
                 pct       = n_done / n_games_total * 100
                 skip_pct  = n_skipped / n_done * 100 if n_done > 0 else 0
