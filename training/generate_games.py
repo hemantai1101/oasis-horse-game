@@ -21,6 +21,7 @@ import json
 import multiprocessing
 import os
 import random
+import signal
 import sys
 import time
 from pathlib import Path
@@ -198,21 +199,33 @@ def main():
         completed_indices = set()
         file_mode = 'w'
 
-    n_games_total = args.n_games
-    n_done    = len(completed_indices)
-    n_written = 0
-    n_skipped = 0
-    start_time = time.time()
+    n_games_total  = args.n_games
+    n_done         = len(completed_indices)
+    n_done_session = 0   # games completed in this session only (for accurate rate)
+    n_written      = 0
+    n_skipped      = 0
+    start_time     = time.time()
 
     print(f'Generating {n_games_total} games → {out_path}')
     print(f'Using {args.workers} parallel workers')
     print(f'Depth: {args.depth}, Time Limit: {args.time_limit}s, Epsilon: {args.epsilon}')
     print('(Ctrl+C to stop early — partial output is still valid)\n')
 
+    interrupted = False
+
+    def _handle_sigterm(signum, frame):
+        # Convert SIGTERM (system shutdown, kill, etc.) into KeyboardInterrupt
+        # so the existing cleanup block in the pool loop handles it uniformly.
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+
     with open(out_path, file_mode) as f:
-        with multiprocessing.Pool(processes=args.workers) as pool:
+        pool = multiprocessing.Pool(processes=args.workers)
+        try:
             for game_idx, examples in pool.imap_unordered(_worker, work):
                 n_done += 1
+                n_done_session += 1
                 if not examples:
                     n_skipped += 1
                 else:
@@ -226,7 +239,7 @@ def main():
                     save_checkpoint(completed_indices)
 
                 elapsed   = time.time() - start_time
-                rate      = n_done / elapsed if elapsed > 0 else 0
+                rate      = n_done_session / elapsed if elapsed > 0 else 0
                 remaining = (n_games_total - n_done) / rate if rate > 0 else 0
                 pct       = n_done / n_games_total * 100
                 skip_pct  = n_skipped / n_done * 100 if n_done > 0 else 0
@@ -238,6 +251,24 @@ def main():
                     f'ETA {remaining:.0f}s',
                     end='\r', flush=True
                 )
+        except KeyboardInterrupt:
+            interrupted = True
+            print('\n\nInterrupted — stopping workers and saving progress...')
+            pool.terminate()
+        finally:
+            pool.close()
+            pool.join()
+            f.flush()
+            if completed_indices:
+                save_checkpoint(completed_indices)
+
+    if interrupted:
+        elapsed = time.time() - start_time
+        print(f'Stopped after {elapsed:.1f}s')
+        print(f'  Progress saved to checkpoint: {checkpoint_path}')
+        print(f'  Games completed: {n_done} / {n_games_total} ({n_written} records written)')
+        print(f'  Resume by re-running the same command.')
+        sys.exit(0)
 
     # Clean up checkpoint — generation complete
     if checkpoint_path.exists():
