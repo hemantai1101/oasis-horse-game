@@ -209,8 +209,10 @@ def main():
     print(f'Depth: {args.depth}, Time Limit: {args.time_limit}s, Epsilon: {args.epsilon}')
     print('(Ctrl+C to stop early — partial output is still valid)\n')
 
+    interrupted = False
     with open(out_path, file_mode) as f:
-        with multiprocessing.Pool(processes=args.workers) as pool:
+        pool = multiprocessing.Pool(processes=args.workers)
+        try:
             for game_idx, examples in pool.imap_unordered(_worker, work):
                 n_done += 1
                 if not examples:
@@ -238,6 +240,24 @@ def main():
                     f'ETA {remaining:.0f}s',
                     end='\r', flush=True
                 )
+        except KeyboardInterrupt:
+            interrupted = True
+            print('\n\nInterrupted — stopping workers and saving progress...')
+            pool.terminate()
+        finally:
+            pool.close()
+            pool.join()
+            f.flush()
+            if completed_indices:
+                save_checkpoint(completed_indices)
+
+    if interrupted:
+        elapsed = time.time() - start_time
+        print(f'Stopped after {elapsed:.1f}s')
+        print(f'  Progress saved to checkpoint: {checkpoint_path}')
+        print(f'  Games completed: {n_done} / {n_games_total} ({n_written} records written)')
+        print(f'  Resume by re-running the same command.')
+        sys.exit(0)
 
     # Clean up checkpoint — generation complete
     if checkpoint_path.exists():
