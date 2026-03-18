@@ -7,12 +7,12 @@
 
 :root {
   /* ===== Board zones ===== */
-  --desert-color: #b89060;
-  --desert-hover: #c8a070;
-  --forest-color: #3a6020;
-  --forest-hover: #4a7828;
-  --oasis-color:  #7a4a18;
-  --oasis-glow:   #d4880a;
+  --desert-color: #c89030;
+  --desert-hover: #d8a040;
+  --forest-color: #287820;
+  --forest-hover: #388a28;
+  --oasis-color:  #6a3810;
+  --oasis-glow:   #c87010;
 
   /* ===== Player pieces (identity — not themed) ===== */
   --p1-bg:   #f4f0e8;
@@ -22,15 +22,15 @@
 
   /* ===== Board layout ===== */
   --cell-size:   min(calc((100vw - 52px) / 11), 58px);
-  --board-gap:   2px;
-  --board-border: #7a5c2a;
+  --board-gap:   3px;
+  --board-border: #502000;
 
   /* ===== Chrome ===== */
-  --bg:          #d4b880;
-  --header-bg:   #3a2a10;
-  --header-text: #f5e6c0;
-  --status-bg:   #2a1a06;
-  --status-text: #e8d5a0;
+  --bg:          #b87c28;
+  --header-bg:   #201000;
+  --header-text: #f8e880;
+  --status-bg:   #180c00;
+  --status-text: #f0d860;
 
   /* ===== Controls (header buttons, github badge) ===== */
   --control-bg:       rgba(255,255,255,0.08);
@@ -70,20 +70,20 @@
 
 /* ===== Day Desert — Light Theme ===== */
 html[data-theme="light"] {
-  --desert-color: #d4aa68;
-  --desert-hover: #dfb870;
-  --forest-color: #4a8028;
-  --forest-hover: #5a9030;
-  --oasis-color:  #8a5420;
-  --oasis-glow:   #e09010;
+  --desert-color: #e0b040;
+  --desert-hover: #ecc050;
+  --forest-color: #40a028;
+  --forest-hover: #50b030;
+  --oasis-color:  #7a4820;
+  --oasis-glow:   #d88010;
 
-  --board-border: #9a7040;
+  --board-border: #7a4010;
 
-  --bg:          #faf5e8;
-  --header-bg:   #e8d4a0;
-  --header-text: #2a1a06;
-  --status-bg:   #f5e8c8;
-  --status-text: #2a1a06;
+  --bg:          #e8c860;
+  --header-bg:   #c89030;
+  --header-text: #1a0800;
+  --status-bg:   #d4a840;
+  --status-text: #1a0800;
 
   --control-bg:       rgba(0,0,0,0.05);
   --control-hover-bg: rgba(0,0,0,0.10);
@@ -117,12 +117,18 @@ html[data-theme="light"] {
 
 body {
   background: var(--bg);
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Press Start 2P', monospace;
   min-height: 100vh;
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding: 0.5rem;
+  image-rendering: pixelated;
+}
+
+/* Rules modal stays readable with system font */
+#rules-modal {
+  font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
 #app {
@@ -140,9 +146,10 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0.55rem 1rem;
-  border-radius: 8px 8px 0 0;
-  border-bottom: 2px solid var(--board-border);
+  border-radius: 0;
+  border-bottom: 4px solid var(--board-border);
   gap: 0.5rem;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.4);
 }
 
 .header-btns {
@@ -154,30 +161,40 @@ body {
 
 #header-title {
   font-weight: 700;
-  font-size: clamp(0.85rem, 2.5vw, 1.05rem);
-  letter-spacing: 0.02em;
+  font-size: clamp(0.55rem, 1.8vw, 0.75rem);
+  letter-spacing: 0;
   color: var(--header-text);
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.7);
 }
 
 .ctrl-btn {
   background: var(--control-bg);
-  border: 1px solid var(--control-border);
+  border: 2px solid var(--control-border);
   color: var(--control-text);
   padding: 0.32rem 0.75rem;
-  border-radius: 16px;
+  border-radius: 0;
   cursor: pointer;
-  font-size: clamp(0.68rem, 1.8vw, 0.82rem);
-  font-weight: 600;
-  transition: background 0.2s, border-color 0.2s;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.44rem, 1.4vw, 0.56rem);
+  font-weight: 400;
+  transition: background 0.06s, transform 0.06s, box-shadow 0.06s;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   white-space: nowrap;
   min-height: 34px;
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.5);
 }
 
 .ctrl-btn:hover {
   background: var(--control-hover-bg);
   border-color: var(--control-text);
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.5);
+}
+
+.ctrl-btn:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 transparent;
 }
 
 /* ===== Status Bar ===== */
@@ -186,26 +203,29 @@ body {
   width: 100%;
   background: var(--status-bg);
   color: var(--status-text);
-  padding: 0.3rem 0.6rem;
-  font-size: clamp(0.68rem, 1.9vw, 0.84rem);
+  padding: 0.5rem 0.6rem;
+  font-size: clamp(0.38rem, 1.2vw, 0.5rem);
   text-align: center;
-  min-height: 1.8rem;
+  min-height: 2.2rem;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.3rem;
-  line-height: 1.3;
+  line-height: 1.8;
+  letter-spacing: 0;
+  border-bottom: 3px solid var(--board-border);
 }
 
 /* Inline turn indicator dot in the status bar */
 .turn-dot {
   display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 0;
   flex-shrink: 0;
   vertical-align: middle;
-  margin-right: 3px;
+  margin-right: 4px;
+  box-shadow: 1px 1px 0 rgba(0,0,0,0.6);
 }
 .turn-dot.p1 {
   background: var(--p1-bg);
@@ -223,14 +243,33 @@ body {
   line-height: 0;
 }
 
+/* CRT scanlines over the whole board */
+#game-area::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0) 0px,
+    rgba(0,0,0,0) 3px,
+    rgba(0,0,0,0.06) 3px,
+    rgba(0,0,0,0.06) 4px
+  );
+  pointer-events: none;
+  z-index: 15;
+}
+
 /* ===== Board ===== */
 #board {
   display: grid;
   grid-template-columns: repeat(11, var(--cell-size));
   grid-template-rows: repeat(11, var(--cell-size));
   gap: var(--board-gap);
-  border: 4px solid var(--board-border);
+  border: 6px solid var(--board-border);
   background: var(--board-border);
+  box-shadow:
+    6px 6px 0 rgba(0,0,0,0.6),
+    inset 2px 2px 0 rgba(255,255,255,0.12);
 }
 
 /* ===== Cells ===== */
@@ -240,22 +279,47 @@ body {
   justify-content: center;
   cursor: pointer;
   position: relative;
-  transition: filter 0.12s;
+  transition: filter 0.08s;
   user-select: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  /* 8-bit tile bevel — bright top-left edge, dark bottom-right shadow */
+  box-shadow:
+    inset 3px 3px 0 rgba(255,255,255,0.18),
+    inset -3px -3px 0 rgba(0,0,0,0.40);
 }
 
-.cell.desert { background: var(--desert-color); }
-.cell.forest  { background: var(--forest-color); }
-.cell.oasis   {
-  background: var(--oasis-color);
-  box-shadow: inset 0 0 10px var(--oasis-glow);
+/* Checkerboard dither overlay gives the 8-bit texture */
+.cell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(45deg, rgba(0,0,0,0.06) 25%, transparent 25%, transparent 75%, rgba(0,0,0,0.06) 75%),
+    linear-gradient(45deg, rgba(0,0,0,0.06) 25%, transparent 25%, transparent 75%, rgba(0,0,0,0.06) 75%);
+  background-size: 4px 4px;
+  background-position: 0 0, 2px 2px;
+  z-index: 0;
 }
 
-.cell.desert:hover { background: var(--desert-hover); }
-.cell.forest:hover  { background: var(--forest-hover); }
-.cell.oasis:hover   { filter: brightness(1.1); }
+.cell.desert {
+  background-color: var(--desert-color);
+}
+.cell.forest {
+  background-color: var(--forest-color);
+}
+.cell.oasis {
+  background-color: var(--oasis-color);
+  box-shadow:
+    inset 0 0 14px var(--oasis-glow),
+    inset 3px 3px 0 rgba(255,255,255,0.18),
+    inset -3px -3px 0 rgba(0,0,0,0.40);
+}
+
+.cell.desert:hover { background-color: var(--desert-hover); }
+.cell.forest:hover  { background-color: var(--forest-hover); }
+.cell.oasis:hover   { filter: brightness(1.12); }
 
 /* ===== Center symbol ===== */
 .center-symbol {
@@ -264,17 +328,17 @@ body {
   pointer-events: none;
   user-select: none;
   position: relative;
-  z-index: 1;
+  z-index: 2;
+  filter: drop-shadow(1px 1px 0 rgba(0,0,0,0.6));
 }
 
 /* ===== Pieces =====
-   CSS color has no effect on emoji, so each squirrel sits on a
-   colored disc: off-white circle for White (P1), near-black for Black (P2).
-   A thin ring border ensures the disc reads clearly on any cell color. */
+   8-bit style: square tile, hard pixel shadow instead of soft drop shadow.
+   Each squirrel sits on a colored square: off-white for P1, near-black for P2. */
 .horse {
-  width: calc(var(--cell-size) * 0.76);
-  height: calc(var(--cell-size) * 0.76);
-  border-radius: 50%;
+  width: calc(var(--cell-size) * 0.74);
+  height: calc(var(--cell-size) * 0.74);
+  border-radius: 0;
   font-size: calc(var(--cell-size) * 0.48);
   line-height: 1;
   display: flex;
@@ -283,24 +347,64 @@ body {
   cursor: pointer;
   transition: transform 0.15s, box-shadow 0.15s;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .horse.player1 {
   background: var(--p1-bg);
-  border: 2px solid var(--p1-ring);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.30);
+  border: 2px solid rgba(0,0,0,0.50);
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.45);
 }
 
 .horse.player2 {
   background: var(--p2-bg);
-  border: 2px solid var(--p2-ring);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.45);
+  border: 2px solid rgba(255,255,255,0.35);
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.60);
 }
 
 .horse.selected {
-  transform: scale(1.22);
-  box-shadow: 0 0 0 3px gold, 0 0 12px rgba(255,210,0,0.65) !important;
+  animation: horse-select 0.28s ease-out forwards;
+  box-shadow: 0 0 0 3px gold, 3px 3px 0 rgba(0,0,0,0.5) !important;
+}
+
+/* ===== Mobile Touch Feedback =====
+   .touching is added/removed by touchstart/touchend in game.js. */
+
+/* Cell tap — immediate brightness flash */
+.cell.touching {
+  animation: cell-tap-flash 0.18s ease-out forwards;
+}
+/* Valid-move cell tap — brighter, more obvious confirmation */
+.cell.valid-move.touching {
+  animation: cell-tap-flash-valid 0.18s ease-out forwards;
+}
+/* Piece tap — scale-press like a physical button */
+.horse.touching {
+  transform: scale(0.86) !important;
+  transition: transform 0.08s ease-out !important;
+}
+
+@keyframes cell-tap-flash {
+  0%   { filter: brightness(1.40); }
+  100% { filter: brightness(1.00); }
+}
+@keyframes cell-tap-flash-valid {
+  0%   { filter: brightness(1.60); }
+  100% { filter: brightness(1.10); }
+}
+
+/* ===== Piece movement & selection animations ===== */
+@keyframes horse-select {
+  0%   { transform: scale(1); }
+  55%  { transform: scale(1.32); }
+  78%  { transform: scale(1.16); }
+  100% { transform: scale(1.22); }
+}
+
+@keyframes horse-leap {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.3) translateY(-3px); }
+  100% { transform: scale(1); }
 }
 
 /* ===== Valid Move Highlights ===== */
@@ -309,7 +413,7 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
   transition: opacity 0.12s;
 }
 
@@ -334,6 +438,7 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 1;
+  /* Pixel-art sharp inset border rather than soft border-radius */
 }
 
 .cell.last-move-from::after {
@@ -365,20 +470,23 @@ body {
   text-align: center;
   padding: 2rem 2.6rem;
   background: var(--overlay-panel-bg);
-  border-radius: 14px;
-  border: 2px solid var(--panel-border);
+  border-radius: 0;
+  border: 4px solid var(--panel-border);
   max-width: 90%;
+  box-shadow: 6px 6px 0 rgba(0,0,0,0.7);
 }
 
 .overlay-panel h2 {
-  font-size: clamp(1.4rem, 5vw, 1.9rem);
+  font-size: clamp(0.75rem, 2.5vw, 1rem);
   margin: 0.8rem 0 1.4rem;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.7);
 }
 
 .winner-banner {
-  font-size: clamp(1.4rem, 5vw, 2rem);
-  font-weight: 700;
+  font-size: clamp(0.7rem, 2.2vw, 0.9rem);
+  font-weight: 400;
   margin: 0.8rem 0 1.2rem;
+  text-shadow: 3px 3px 0 rgba(0,0,0,0.7);
 }
 
 /* White winner: light text in dark mode, dark text in light mode */
@@ -388,24 +496,33 @@ body {
 
 .btn {
   display: inline-block;
-  padding: 0.65rem 1.8rem;
+  padding: 0.65rem 1.4rem;
   min-height: 44px;
-  font-size: 1rem;
+  font-size: clamp(0.5rem, 1.5vw, 0.62rem);
+  font-family: 'Press Start 2P', monospace;
   background: var(--oasis-color);
-  color: white;
-  border: none;
-  border-radius: 8px;
+  color: #f8e880;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 0;
   cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  transition: background 0.06s, transform 0.06s, box-shadow 0.06s;
+  font-weight: 400;
+  letter-spacing: 0;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.6);
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.5);
 }
 
 .btn:hover {
   background: var(--oasis-glow);
-  transform: scale(1.05);
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 rgba(0,0,0,0.6);
+}
+
+.btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 transparent;
 }
 
 /* ===== Rules Modal ===== */
@@ -424,13 +541,15 @@ body {
 
 .rules-panel {
   background: var(--panel-bg);
-  border: 2px solid var(--panel-border);
-  border-radius: 14px;
+  border: 4px solid var(--panel-border);
+  border-radius: 0;
   padding: 1.8rem 2rem;
   max-width: 360px;
   width: 100%;
   color: var(--panel-text);
   position: relative;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  box-shadow: 6px 6px 0 rgba(0,0,0,0.7);
 }
 
 .rules-panel h2 {
@@ -539,28 +658,30 @@ body {
 #legend {
   display: flex;
   gap: 1.2rem;
-  padding: 0.4rem 0.8rem;
+  padding: 0.5rem 0.8rem;
   background: var(--status-bg);
-  border-radius: 0 0 8px 8px;
+  border-radius: 0;
   width: 100%;
   justify-content: center;
-  border-top: 1px solid var(--legend-border);
+  border-top: 3px solid var(--legend-border);
+  box-shadow: 0 4px 0 rgba(0,0,0,0.4);
 }
 
 .legend-item {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: clamp(0.65rem, 1.8vw, 0.75rem);
-  color: var(--muted-text);
+  font-size: clamp(0.34rem, 1.1vw, 0.44rem);
+  color: var(--status-text);
 }
 
 .legend-dot {
   display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 0;
   flex-shrink: 0;
+  box-shadow: 1px 1px 0 rgba(0,0,0,0.5);
 }
 
 .slide-dot  { background: rgba(255, 230, 50, 0.85); }
@@ -609,18 +730,22 @@ body {
 }
 .btn-secondary {
   background: var(--btn-secondary-bg);
-  border: 1px solid var(--control-border);
+  border: 2px solid var(--control-border);
   color: var(--control-text);
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.5);
 }
 .btn-secondary:hover {
   background: var(--btn-secondary-bg-hover);
   color: var(--panel-text);
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.5);
 }
 .btn-ghost {
   background: transparent;
-  border: 1px solid var(--btn-ghost-border);
+  border: 2px solid var(--btn-ghost-border);
   color: var(--muted-text);
-  font-size: 0.85rem;
+  font-size: clamp(0.4rem, 1.2vw, 0.5rem);
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.4);
 }
 .btn-ghost:hover {
   background: var(--btn-ghost-bg-hover);
@@ -633,10 +758,11 @@ body {
   align-items: center;
   gap: 0.6rem;
   background: var(--room-code-bg);
-  border: 1px solid var(--control-border);
-  border-radius: 8px;
+  border: 2px solid var(--control-border);
+  border-radius: 0;
   padding: 0.75rem 1rem;
   margin: 0.75rem 0;
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.5);
 }
 .room-code-label {
   font-size: 0.65rem;
@@ -681,13 +807,13 @@ body {
 .room-code-input {
   width: 100%;
   text-align: center;
-  font-family: 'Courier New', monospace;
-  font-size: 1.8rem;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 1.2rem;
   letter-spacing: 0.3em;
   padding: 0.55rem 0.5rem;
   background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  border-radius: 6px;
+  border: 2px solid var(--input-border);
+  border-radius: 0;
   color: var(--panel-text);
   text-transform: uppercase;
   box-sizing: border-box;
@@ -695,7 +821,7 @@ body {
 .room-code-input:focus {
   outline: none;
   border-color: var(--control-text);
-  box-shadow: 0 0 0 2px var(--input-border);
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.5);
 }
 .join-error {
   display: block;
@@ -720,7 +846,7 @@ body {
 /* ===== Mobile ===== */
 @media (max-width: 480px) {
   .overlay-panel { padding: 1.4rem 1.2rem; }
-  .winner-banner { font-size: 1.5rem; }
-  .room-code-value { font-size: 1.3rem; }
-  .room-code-input { font-size: 1.4rem; letter-spacing: 0.2em; }
+  .winner-banner { font-size: 0.65rem; }
+  .room-code-value { font-size: 1rem; }
+  .room-code-input { font-size: 0.9rem; letter-spacing: 0.2em; }
 }

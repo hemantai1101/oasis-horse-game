@@ -21,6 +21,7 @@ import json
 import multiprocessing
 import os
 import random
+import signal
 import sys
 import time
 from pathlib import Path
@@ -64,7 +65,7 @@ def play_game(p1_mode, p2_mode, depth, time_limit, epsilon):
 
     for _ in range(MAX_MOVES):
         # Record position BEFORE the move
-        feats = state_to_features(horses, current_player)
+        feats = state_to_features(horses, current_player, board)
         history.append((feats, current_player))
 
         # Choose a move
@@ -101,20 +102,34 @@ def apply_180_augmentation(examples):
     Rotation: col → 12-col, row → 12-row.
     This preserves player-corner assignments (TL↔BR, TR↔BL stay with the same owner).
     Returns the augmented examples (original are NOT included — caller combines them).
+
+    Feature layout (110 total):
+      5 features per horse × 20 horses = indices 0..99
+        base+0: col_norm  → 1 - col_norm  (flip)
+        base+1: row_norm  → 1 - row_norm  (flip)
+        base+2: dist_to_center             (invariant — same distance after rotation)
+        base+3: on_axis                    (invariant — col=6 stays col=6 after rotation)
+        base+4: path_threat                (invariant — symmetric board, block count unchanged)
+      Backstop cells [100..103]:
+        (6,5) ↔ (6,7)  and  (5,6) ↔ (7,6)  under 180° rotation
+      Player indicator [104]: unchanged
+      New global features [105..109]: all invariant under 180° rotation — unchanged
     """
     augmented = []
     for ex in examples:
         feats = ex['features']
-        # features layout: [p1: 20 vals][p2: 20 vals][player: 1 val]
-        # each pair (col_norm, row_norm) where col_norm = (col-1)/10
-        # rotation: col → (12-col), so col_norm' = (12 - (col_norm*10+1) - 1)/10
-        #         = (10 - col_norm*10)/10 = 1 - col_norm
-        # same for row_norm
         new_feats = list(feats)
-        for i in range(0, 40, 2):      # 20 pairs in positions [0..39] (10 P1 + 10 P2 horses)
-            new_feats[i]   = 1.0 - feats[i]    # col
-            new_feats[i+1] = 1.0 - feats[i+1]  # row
-        # player indicator stays the same (rotation doesn't change whose turn it is)
+        for i in range(20):                    # 20 horses × 5 features each
+            base = i * 5
+            new_feats[base]   = 1.0 - feats[base]    # col_norm: flip
+            new_feats[base+1] = 1.0 - feats[base+1]  # row_norm: flip
+            # dist_to_center [base+2], on_axis [base+3], path_threat [base+4]: unchanged
+        new_feats[100] = feats[101]            # backstop (6,5) ← (6,7)
+        new_feats[101] = feats[100]            # backstop (6,7) ← (6,5)
+        new_feats[102] = feats[103]            # backstop (5,6) ← (7,6)
+        new_feats[103] = feats[102]            # backstop (7,6) ← (5,6)
+        # new_feats[104] (player indicator): unchanged
+        # new_feats[105..109] (winning threats, at-home counts, blocking count): all invariant
         augmented.append({'features': new_feats, 'label': ex['label']})
     return augmented
 
@@ -123,12 +138,12 @@ def apply_180_augmentation(examples):
 
 def _worker(args_tuple):
     """Worker function for multiprocessing — plays one game and returns examples."""
-    p1_mode, p2_mode, seed, depth, time_limit, epsilon = args_tuple
+    game_idx, p1_mode, p2_mode, seed, depth, time_limit, epsilon = args_tuple
     random.seed(seed)
     examples = play_game(p1_mode, p2_mode, depth, time_limit, epsilon)
     if examples is None:
-        return []
-    return examples + apply_180_augmentation(examples)
+        return game_idx, []
+    return game_idx, examples + apply_180_augmentation(examples)
 
 
 def main():
@@ -160,48 +175,112 @@ def main():
     work = []
     for i in range(args.n_games):
         p1_mode, p2_mode = random.choices(modes, weights=weights, k=1)[0]
-        work.append((p1_mode, p2_mode, args.seed + i, args.depth, args.time_limit, args.epsilon))
+        work.append((i, p1_mode, p2_mode, args.seed + i, args.depth, args.time_limit, args.epsilon))
 
-    n_games    = args.n_games
-    n_written  = 0
-    n_skipped  = 0
-    n_done     = 0
-    start_time = time.time()
+    checkpoint_path = out_path.with_suffix('.checkpoint')
 
-    print(f'Generating {n_games} games → {out_path}')
+    def load_checkpoint():
+        """Returns set of completed game indices, or None if no checkpoint (fresh start)."""
+        if checkpoint_path.exists() and out_path.exists():
+            with open(checkpoint_path) as f:
+                return set(json.load(f))
+        return None
+
+    def save_checkpoint(completed: set):
+        with open(checkpoint_path, 'w') as f:
+            json.dump(list(completed), f)
+
+    completed_indices = load_checkpoint()
+
+    if completed_indices is not None:
+        n_already_done = len(completed_indices)
+        work = [w for w in work if w[0] not in completed_indices]
+        file_mode = 'a'
+        print(f'Resuming: {n_already_done} games already done, {len(work)} remaining.')
+    else:
+        completed_indices = set()
+        file_mode = 'w'
+
+    n_games_total  = args.n_games
+    n_done         = len(completed_indices)
+    n_done_session = 0   # games completed in this session only (for accurate rate)
+    n_written      = 0
+    n_skipped      = 0
+    start_time     = time.time()
+
+    print(f'Generating {n_games_total} games → {out_path}')
     print(f'Using {args.workers} parallel workers')
     print(f'Depth: {args.depth}, Time Limit: {args.time_limit}s, Epsilon: {args.epsilon}')
     print('(Ctrl+C to stop early — partial output is still valid)\n')
 
-    with open(out_path, 'w') as f:
-        with multiprocessing.Pool(processes=args.workers) as pool:
-            for examples in pool.imap_unordered(_worker, work):
+    interrupted = False
+
+    def _handle_sigterm(signum, frame):
+        # Convert SIGTERM (system shutdown, kill, etc.) into KeyboardInterrupt
+        # so the existing cleanup block in the pool loop handles it uniformly.
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+
+    with open(out_path, file_mode) as f:
+        pool = multiprocessing.Pool(processes=args.workers)
+        try:
+            for game_idx, examples in pool.imap_unordered(_worker, work):
                 n_done += 1
+                n_done_session += 1
                 if not examples:
                     n_skipped += 1
                 else:
                     for ex in examples:
                         f.write(json.dumps(ex) + '\n')
                         n_written += 1
+                    completed_indices.add(game_idx)
+
+                if n_done % 100 == 0:
+                    f.flush()
+                    save_checkpoint(completed_indices)
 
                 elapsed   = time.time() - start_time
-                rate      = n_done / elapsed if elapsed > 0 else 0
-                remaining = (n_games - n_done) / rate if rate > 0 else 0
-                pct       = n_done / n_games * 100
+                rate      = n_done_session / elapsed if elapsed > 0 else 0
+                remaining = (n_games_total - n_done) / rate if rate > 0 else 0
+                pct       = n_done / n_games_total * 100
                 skip_pct  = n_skipped / n_done * 100 if n_done > 0 else 0
                 print(
-                    f'  [{pct:5.1f}%] game {n_done}/{n_games} | '
+                    f'  [{pct:5.1f}%] game {n_done}/{n_games_total} | '
                     f'skip {skip_pct:.0f}% | '
                     f'{n_written} records | '
                     f'{rate:.2f} games/s | '
                     f'ETA {remaining:.0f}s',
                     end='\r', flush=True
                 )
+        except KeyboardInterrupt:
+            interrupted = True
+            print('\n\nInterrupted — stopping workers and saving progress...')
+            pool.terminate()
+        finally:
+            pool.close()
+            pool.join()
+            f.flush()
+            if completed_indices:
+                save_checkpoint(completed_indices)
+
+    if interrupted:
+        elapsed = time.time() - start_time
+        print(f'Stopped after {elapsed:.1f}s')
+        print(f'  Progress saved to checkpoint: {checkpoint_path}')
+        print(f'  Games completed: {n_done} / {n_games_total} ({n_written} records written)')
+        print(f'  Resume by re-running the same command.')
+        sys.exit(0)
+
+    # Clean up checkpoint — generation complete
+    if checkpoint_path.exists():
+        checkpoint_path.unlink()
 
     elapsed = time.time() - start_time
+    total_records = sum(1 for _ in open(out_path))
     print(f'\n\nDone in {elapsed:.1f}s')
-    print(f'  Games played:  {n_games - n_skipped} / {n_games} (skipped {n_skipped})')
-    print(f'  Records written: {n_written} (including 2× augmentation)')
+    print(f'  Games played:  {n_games_total - n_skipped} / {n_games_total} (skipped {n_skipped})')
+    print(f'  Records written: {total_records} (including 2× augmentation)')
     print(f'  Output: {out_path}')
 
 

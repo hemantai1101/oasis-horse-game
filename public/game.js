@@ -50,6 +50,14 @@ let GameState = {
 };
 
 
+// ===== Haptic Feedback =====
+
+function vibrate(pattern) {
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate(pattern); } catch (_) {}
+  }
+}
+
 // ===== Utility Functions =====
 
 function getZone(col, row) {
@@ -114,6 +122,59 @@ function getValidMoves(horse) {
   return [...getSlideMoves(horse), ...getKnightMoves(horse)];
 }
 
+// ===== Animation =====
+
+let isAnimating = false;
+
+function animatePieceMove(fromCol, fromRow, toCol, toRow, owner, moveType, onComplete) {
+  const boardEl = document.getElementById('board');
+  const fromIdx = (fromRow - 1) * BOARD_SIZE + (fromCol - 1);
+  const toIdx   = (toRow   - 1) * BOARD_SIZE + (toCol   - 1);
+  const fromCell = boardEl.children[fromIdx];
+  const toCell   = boardEl.children[toIdx];
+
+  if (!fromCell || !toCell) { onComplete(); return; }
+
+  const fromRect = fromCell.getBoundingClientRect();
+  const toRect   = toCell.getBoundingClientRect();
+  const cellSize  = fromRect.width;
+  const pieceSize = cellSize * 0.76;
+  const offset    = (cellSize - pieceSize) / 2;
+
+  const clone = document.createElement('div');
+  clone.className = `horse player${owner}`;
+  clone.textContent = PIECE;
+  Object.assign(clone.style, {
+    position:      'fixed',
+    width:         pieceSize + 'px',
+    height:        pieceSize + 'px',
+    fontSize:      (cellSize * 0.48) + 'px',
+    left:          (fromRect.left + offset) + 'px',
+    top:           (fromRect.top  + offset) + 'px',
+    pointerEvents: 'none',
+    zIndex:        '100',
+    transition:    'left 0.22s ease-in-out, top 0.22s ease-in-out',
+    animation:     moveType === 'knight' ? 'horse-leap 0.22s ease-in-out' : 'none',
+    willChange:    'left, top',
+  });
+  document.body.appendChild(clone);
+  void clone.offsetWidth; // force reflow before transition starts
+
+  clone.style.left = (toRect.left + offset) + 'px';
+  clone.style.top  = (toRect.top  + offset) + 'px';
+
+  let done = false;
+  function finish() {
+    if (done) return;
+    done = true;
+    clone.removeEventListener('transitionend', finish);
+    if (clone.parentNode) clone.parentNode.removeChild(clone);
+    onComplete();
+  }
+  clone.addEventListener('transitionend', finish);
+  setTimeout(finish, 400); // safety fallback if transitionend doesn't fire
+}
+
 // ===== Game Flow =====
 
 function initGame(isRestart = false) {
@@ -172,6 +233,8 @@ function placeInitialHorses() {
 function handleCellClick(col, row) {
   if (GameState.phase !== 'playing') return;
 
+  // Block clicks during move animation
+  if (isAnimating) return;
   // Block clicks while the computer is deciding
   if (AIState.thinking) return;
   // Block clicks on the computer's turn
@@ -199,12 +262,14 @@ function handleCellClick(col, row) {
     }
   }
 
+  vibrate(8);
   deselectHorse();
 }
 
 function selectHorse(horse) {
   GameState.selectedHorse = horse;
   GameState.validMoves = getValidMoves(horse);
+  vibrate(15);
   posthog.capture('piece_selected', {
     player: PLAYER_NAME[horse.owner],
     from: { col: horse.col, row: horse.row },
@@ -221,7 +286,11 @@ function deselectHorse() {
 }
 
 function executeMove(horse, move) {
-  const fromCol = horse.col, fromRow = horse.row;
+  const fromCol  = horse.col, fromRow = horse.row;
+  const moveType = move.moveType;
+  const owner    = horse.owner;
+
+  // Update board state immediately
   GameState.lastMove = { fromCol, fromRow, toCol: move.col, toRow: move.row };
   delete GameState.board[boardKey(horse.col, horse.row)];
   horse.col = move.col;
@@ -231,13 +300,15 @@ function executeMove(horse, move) {
 
   posthog.capture('move_executed', {
     player: PLAYER_NAME[GameState.currentPlayer],
-    move_type: move.moveType,
+    move_type: moveType,
     from: { col: fromCol, row: fromRow },
     to: { col: move.col, row: move.row },
     move_number: GameState.totalMoves,
   });
 
-  if (move.col === CENTER.col && move.row === CENTER.row) {
+  const isWin = move.col === CENTER.col && move.row === CENTER.row;
+  if (isWin) {
+    vibrate([60, 30, 60]);
     GameState.winner = GameState.currentPlayer;
     GameState.selectedHorse = null;
     GameState.validMoves = [];
@@ -247,16 +318,28 @@ function executeMove(horse, move) {
       total_moves: GameState.totalMoves,
     });
     if (MultiplayerState.roomCode) pushGameState(null);
-    render();
-    return;
+  } else {
+    vibrate(20);
+    GameState.selectedHorse = null;
+    GameState.validMoves = [];
+    GameState.currentPlayer = GameState.currentPlayer === 1 ? 2 : 1;
+    if (MultiplayerState.roomCode) pushGameState(null);
   }
 
-  GameState.selectedHorse = null;
-  GameState.validMoves = [];
-  GameState.currentPlayer = GameState.currentPlayer === 1 ? 2 : 1;
-  if (MultiplayerState.roomCode) pushGameState(null);
-  scheduleAIMove();
-  render();
+  // Hide the source piece in the current DOM while the clone animates
+  const boardEl = document.getElementById('board');
+  const fromCell = boardEl.children[(fromRow - 1) * BOARD_SIZE + (fromCol - 1)];
+  if (fromCell) {
+    const horseEl = fromCell.querySelector('.horse');
+    if (horseEl) horseEl.style.opacity = '0';
+  }
+
+  isAnimating = true;
+  animatePieceMove(fromCol, fromRow, move.col, move.row, owner, moveType, () => {
+    isAnimating = false;
+    render();
+    if (!isWin) scheduleAIMove();
+  });
 }
 
 // ===== Rendering =====
@@ -511,4 +594,42 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   initGame();
   if (typeof tryReconnect === 'function') tryReconnect();
+
+  // ===== Mobile touch visual feedback =====
+  // Uses event delegation on #board so it survives renderBoard() DOM rebuilds.
+  const boardEl = document.getElementById('board');
+  let _touchTarget = null;
+
+  boardEl.addEventListener('touchstart', e => {
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    _touchTarget = cell;
+    cell.classList.add('touching');
+    const horse = cell.querySelector('.horse');
+    if (horse) horse.classList.add('touching');
+  }, { passive: true });
+
+  function _onTouchEnd() {
+    if (!_touchTarget) return;
+    const cell = _touchTarget;
+    _touchTarget = null;
+    // Small delay so the flash is visible even on very quick taps
+    setTimeout(() => {
+      cell.classList.remove('touching');
+      const horse = cell.querySelector('.horse');
+      if (horse) horse.classList.remove('touching');
+    }, 120);
+  }
+
+  boardEl.addEventListener('touchend',    _onTouchEnd, { passive: true });
+  boardEl.addEventListener('touchcancel', _onTouchEnd, { passive: true });
+
+  // Re-render on resize so the board reflows to the new viewport width.
+  // CSS vw-based --cell-size auto-updates, but a render() call ensures the
+  // grid DOM is fresh and any layout quirks are resolved.
+  let _resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(render, 50);
+  });
 });
