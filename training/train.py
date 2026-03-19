@@ -7,14 +7,20 @@ Optim:  Adam (lr=1e-3, weight_decay=1e-4, with cosine LR schedule)
 
 Usage:
   python train.py                                      # train with defaults
-  python train.py --epochs 50                          # more epochs
+  python train.py --epochs 100                         # custom epoch count
   python train.py --data data/games.jsonl              # custom data file
   python train.py --output models/model_run008.pt      # custom output file
+  python train.py --resume models/model_run008_checkpoint.pt --epochs 200  # continue to epoch 200
 
 Output:
   --output sets the full path for the best model file.
   Default: training/models/model.pt
-  model_latest.pt is always saved in the same directory.
+  model_latest.pt and model_checkpoint.pt are always saved in the same directory.
+
+Resuming:
+  --resume loads a checkpoint and continues training.
+  --epochs must be greater than the checkpoint epoch (it is the new TOTAL target).
+  Example: checkpoint at epoch 100, pass --epochs 200 to train 100 more epochs.
 """
 
 import argparse
@@ -105,10 +111,11 @@ def train(args):
     script_dir = Path(__file__).parent
 
     data_path      = Path(args.data) if args.data else script_dir / 'data' / 'games.jsonl'
-    best_save_path = Path(args.output) if args.output else script_dir / 'models' / 'model.pt'
-    model_dir      = best_save_path.parent
+    best_save_path       = Path(args.output) if args.output else script_dir / 'models' / 'model.pt'
+    model_dir            = best_save_path.parent
     model_dir.mkdir(parents=True, exist_ok=True)
-    latest_save_path = model_dir / 'model_latest.pt'
+    latest_save_path     = model_dir / (best_save_path.stem + '_latest.pt')
+    checkpoint_save_path = model_dir / (best_save_path.stem + '_checkpoint.pt')
 
 
     # --- Dataset ---
@@ -132,16 +139,34 @@ def train(args):
 
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
+    # --- Resume from checkpoint if requested ---
+    start_epoch   = 0
     best_val_loss = math.inf
+
+    if args.resume:
+        ckpt = torch.load(args.resume, map_location=device)
+        model.load_state_dict(ckpt['model_state_dict'])
+        optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+        start_epoch   = ckpt['epoch']
+        best_val_loss = ckpt['best_val_loss']
+        if args.epochs <= start_epoch:
+            raise ValueError(f'--epochs {args.epochs} must be greater than checkpoint epoch {start_epoch}')
+        print(f'Resumed from epoch {start_epoch} — best val loss so far: {best_val_loss:.5f}')
+        print(f'Continuing to epoch {args.epochs} ({args.epochs - start_epoch} more epochs)\n')
+
+    # Cosine schedule over total epochs; last_epoch positions LR correctly on resume
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=args.epochs, last_epoch=start_epoch - 1
+    )
+
     start_time = time.time()
 
     print(f'\nTraining for {args.epochs} epochs...\n')
     print(f'{"Epoch":>5}  {"Train Loss":>10}  {"Val Loss":>10}  {"LR":>8}')
     print('-' * 42)
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch + 1, args.epochs + 1):
         # --- Train ---
         model.train()
         train_loss = 0.0
@@ -172,10 +197,17 @@ def train(args):
             best_val_loss = val_loss
             torch.save(model.state_dict(), best_save_path)
 
+        scheduler.step()
+
+        # Save full checkpoint every 5 epochs for resume support
         if epoch % 5 == 0:
             torch.save(model.state_dict(), latest_save_path)
-
-        scheduler.step()
+            torch.save({
+                'epoch':                epoch,
+                'model_state_dict':     model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'best_val_loss':        best_val_loss,
+            }, checkpoint_save_path)
 
     elapsed = time.time() - start_time
     print(f'\nBest val loss: {best_val_loss:.5f}')
@@ -200,6 +232,8 @@ def main():
                         help='Adam weight decay (default: 1e-4)')
     parser.add_argument('--output',       type=str,   default=None,
                         help='Full path for best model file (default: training/models/model.pt)')
+    parser.add_argument('--resume',       type=str,   default=None,
+                        help='Path to checkpoint file to resume training from')
     args = parser.parse_args()
     train(args)
 
