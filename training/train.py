@@ -140,6 +140,11 @@ def train(args):
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
+    # --- CPU thread count ---
+    if args.num_threads:
+        torch.set_num_threads(args.num_threads)
+    print(f'CPU threads: {torch.get_num_threads()}')
+
     # --- Resume from checkpoint if requested ---
     start_epoch   = 0
     best_val_loss = math.inf
@@ -234,6 +239,8 @@ def main():
                         help='Full path for best model file (default: training/models/model.pt)')
     parser.add_argument('--resume',       type=str,   default=None,
                         help='Path to checkpoint file to resume training from')
+    parser.add_argument('--num-threads',  type=int,   default=None,
+                        help='PyTorch CPU thread count (default: PyTorch auto). Try 8-16 on many-core machines.')
     args = parser.parse_args()
     train(args)
 
