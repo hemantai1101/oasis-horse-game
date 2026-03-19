@@ -68,7 +68,7 @@ class GameDataset(Dataset):
         # First pass: count lines to pre-allocate memory
         print(f"Counting records in {path}...")
         with open(path) as f:
-            num_lines = sum(1 for line in f if line.strip())
+            num_lines = sum(1 for line in f if line.strip() and '\x00' not in line)
 
         # Pre-allocate numpy arrays
         features = np.zeros((num_lines, 110), dtype=np.float32)
@@ -80,7 +80,7 @@ class GameDataset(Dataset):
             j = 0
             for line in f:
                 line = line.strip()
-                if not line:
+                if not line or '\x00' in line:
                     continue
                 obj = json.loads(line)
                 features[j] = obj['features']
