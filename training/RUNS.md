@@ -15,7 +15,8 @@ Master summary of all training runs. **Full details in `training/runs/run_NNN.md
 | [005](runs/run_005.md) | 2026-03-15 | 50k games, depth=4 | 41 | 41→256→128→1 | 0.69068 | ✅ Exported & tested | 3× wider model |
 | [006](runs/run_006.md) | 2026-03-17 | 50k games, depth=4 | **105** | 105→256→128→1 | **0.62254** | ✅ Exported & tested | **Feature engineering** |
 | [007](runs/run_007.md) | 2026-03-18 | 50k games, depth=4 | **110** | 110→256→128→1 | 0.63295 | ❌ Regression | path_threat graded (backfired) |
-| [008](runs/run_008.md) | 2026-03-19 | 50k games, depth=4 | **110** | 110→256→128→1 | TBD | 🔄 In progress | **Revert to path_clear + fix normalizations** |
+| [008](runs/run_008.md) | 2026-03-19 | 15k+50k games, depth=4 | **110** | 110→256→128→1 | 0.60674 (15k) / 0.62827 (50k) | ❌ Underfitted at 100 epochs | Revert path_clear + fix normalizations |
+| [009](runs/run_009.md) | 2026-03-19 | 50k games, depth=4 | **110** | 110→256→128→1 | TBD | 🔄 In progress | **200 epochs — proper convergence** |
 
 ---
 
@@ -29,7 +30,8 @@ Run 004  Stronger teacher: depth-4, narrow → 0.707  Model too small for depth-
 Run 005  Wider model: depth-4, wide        → 0.691  ← Ceiling for 41 raw position features
 Run 006  Feature engineering: depth-4, 105 → 0.622  ← Biggest jump yet (+0.069 vs Run 005)
 Run 007  Explicit threats:   depth-4, 110 → 0.633  ← REGRESSION: graded path_threat hurt model
-Run 008  Fix normalizations: depth-4, 110 → TBD    ← path_clear (binary) + winning_threats/2
+Run 008  Fix normalizations: depth-4, 110 → 0.607* ← Normalization fix confirmed on 15k; 50k underfitted at 100 epochs
+Run 009  Full convergence:   depth-4, 110 → TBD    ← Same 50k v4 data, 200 epochs
 ```
 
 ---
@@ -59,9 +61,9 @@ Run 008  Fix normalizations: depth-4, 110 → TBD    ← path_clear (binary) + w
 
 ## Current Best Model
 
-**Run 006** — `training/models/model_run006.pt` / `public/model/weights.json`
-- Architecture: 105→256→128→1
-- Val loss: 0.62254
-- In-game: Exported and tested
+**Run 008 (15k)** — `training/models/model_run008_15k.pt`
+- Architecture: 110→256→128→1
+- Val loss: **0.60674** ← best val loss seen across all runs
+- In-game: Not yet exported (superseded by Run 009)
 
-Run 007 (0.63295) was a regression — not deployed. Run 008 in progress.
+Run 006 (0.62254) remains deployed. Run 009 in progress — expected to beat 0.607.
