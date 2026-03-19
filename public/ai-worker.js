@@ -238,18 +238,27 @@ function stateToFeatures(snap) {
 }
 
 function nnLayer(x, W, b, activation) {
-  return b.map((bi, i) => {
-    const z = bi + W[i].reduce((s, w, j) => s + w * x[j], 0);
-    return activation === 'relu' ? Math.max(0, z) : Math.tanh(z);
-  });
+  const n = b.length;
+  const out = new Float32Array(n);
+  const xLen = x.length;
+  for (let i = 0; i < n; i++) {
+    let z = b[i];
+    const wi = W[i];
+    for (let j = 0; j < xLen; j++) z += wi[j] * x[j];
+    out[i] = activation === 'relu' ? (z > 0 ? z : 0) : Math.tanh(z);
+  }
+  return out;
 }
 
 // BatchNorm inference: y = (x - mean) / sqrt(var + eps) * gamma + beta
 function nnBatchNorm(x, mean, variance, gamma, beta, eps) {
-  return x.map((xi, i) => {
-    const xhat = (xi - mean[i]) / Math.sqrt(variance[i] + eps);
-    return gamma[i] * xhat + beta[i];
-  });
+  const n = x.length;
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const xhat = (x[i] - mean[i]) / Math.sqrt(variance[i] + eps);
+    out[i] = gamma[i] * xhat + beta[i];
+  }
+  return out;
 }
 
 function nnEvaluate(snap) {
@@ -498,7 +507,7 @@ function getAIMove(snap) {
     return { horseId: winMove.horseId, move: winMove.move };
   }
 
-  const timeBudget = 12000;
+  const timeBudget = 20000;
   const deadline = Date.now() + timeBudget;
   let bestVal = -Infinity;
   let bestMove = moves[0];
