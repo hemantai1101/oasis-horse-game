@@ -32,8 +32,10 @@ from train import ValueNet
 
 
 def export_weights(model_path, output_path):
-    model = ValueNet()
     state = torch.load(model_path, map_location='cpu', weights_only=True)
+    input_size = state['net.0.weight'].shape[1]  # auto-detect from checkpoint
+    print(f'Detected input size: {input_size}')
+    model = ValueNet(input_size=input_size)
     model.load_state_dict(state)
     model.eval()
 
