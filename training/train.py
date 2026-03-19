@@ -6,13 +6,15 @@ Loss:   MSE
 Optim:  Adam (lr=1e-3, weight_decay=1e-4, with cosine LR schedule)
 
 Usage:
-  python train.py                          # train with defaults
-  python train.py --epochs 50             # more epochs
-  python train.py --data data/games.jsonl # custom data file
+  python train.py                                      # train with defaults
+  python train.py --epochs 50                          # more epochs
+  python train.py --data data/games.jsonl              # custom data file
+  python train.py --output models/model_run008.pt      # custom output file
 
 Output:
-  models/model.pt       — saved PyTorch model (best validation loss)
-  models/model_latest.pt — saved PyTorch model (every 5 epochs)
+  --output sets the full path for the best model file.
+  Default: training/models/model.pt
+  model_latest.pt is always saved in the same directory.
 """
 
 import argparse
@@ -31,14 +33,14 @@ from torch.utils.data import Dataset, DataLoader, random_split
 
 class ValueNet(nn.Module):
     """
-    MLP: 110 inputs → 256 → 128 → 1 (tanh output in [-1, 1]).
+    MLP: input_size → 256 → 128 → 1 (tanh output in [-1, 1]).
     Output = +1 means current player wins; -1 means current player loses.
-    Input size increased from 105 to 110 with explicit threat/phase features (Run 007+).
+    input_size=105 for Run 001-006, 110 for Run 007+.
     """
-    def __init__(self):
+    def __init__(self, input_size=110):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(110, 256),
+            nn.Linear(input_size, 256),
             nn.ReLU(),
             nn.BatchNorm1d(256),
             nn.Linear(256, 128),
@@ -75,13 +77,15 @@ class GameDataset(Dataset):
         # Second pass: fill the arrays
         print(f"Loading {num_lines:,} records...")
         with open(path) as f:
-            for i, line in enumerate(f):
+            j = 0
+            for line in f:
                 line = line.strip()
                 if not line:
                     continue
                 obj = json.loads(line)
-                features[i] = obj['features']
-                labels[i] = obj['label']
+                features[j] = obj['features']
+                labels[j] = obj['label']
+                j += 1
 
         self.X = torch.from_numpy(features)
         self.y = torch.from_numpy(labels)
@@ -100,10 +104,10 @@ class GameDataset(Dataset):
 def train(args):
     script_dir = Path(__file__).parent
 
-    data_path  = Path(args.data) if args.data else script_dir / 'data' / 'games.jsonl'
-    model_dir  = script_dir / 'models'
-    model_dir.mkdir(exist_ok=True)
-    best_save_path = model_dir / 'model.pt'
+    data_path      = Path(args.data) if args.data else script_dir / 'data' / 'games.jsonl'
+    best_save_path = Path(args.output) if args.output else script_dir / 'models' / 'model.pt'
+    model_dir      = best_save_path.parent
+    model_dir.mkdir(parents=True, exist_ok=True)
     latest_save_path = model_dir / 'model_latest.pt'
 
 
@@ -194,6 +198,8 @@ def main():
                         help='Initial learning rate (default: 0.001)')
     parser.add_argument('--weight-decay', type=float, default=1e-4,
                         help='Adam weight decay (default: 1e-4)')
+    parser.add_argument('--output',       type=str,   default=None,
+                        help='Full path for best model file (default: training/models/model.pt)')
     args = parser.parse_args()
     train(args)
 
