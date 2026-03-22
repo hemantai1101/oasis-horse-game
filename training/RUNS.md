@@ -16,7 +16,8 @@ Master summary of all training runs. **Full details in `training/runs/run_NNN.md
 | [006](runs/run_006.md) | 2026-03-17 | 50k games, depth=4 | **105** | 105→256→128→1 | **0.62254** | ✅ Exported & tested | **Feature engineering** |
 | [007](runs/run_007.md) | 2026-03-18 | 50k games, depth=4 | **110** | 110→256→128→1 | 0.63295 | ❌ Regression | path_threat graded (backfired) |
 | [008](runs/run_008.md) | 2026-03-19 | 15k+50k games, depth=4 | **110** | 110→256→128→1 | 0.60674 (15k) / 0.62827 (50k) | ❌ Underfitted at 100 epochs | Revert path_clear + fix normalizations |
-| [009](runs/run_009.md) | 2026-03-19 | 50k games, depth=4 | **110** | 110→256→128→1 | TBD | 🔄 In progress | **200 epochs — proper convergence** |
+| [009](runs/run_009.md) | 2026-03-19 | 50k games, depth=4 | **110** | 110→256→128→1 | 0.62504 | ✅ Exported & tested | 200 epochs — confirmed depth=4 ceiling |
+| [010](runs/run_010.md) | 2026-03-21 | 15k games, depth=5 | **110** | 110→256→128→1 | **0.56910** | ✅ Best model | **depth=5 teacher — biggest jump since Run 006** |
 
 ---
 
@@ -31,7 +32,8 @@ Run 005  Wider model: depth-4, wide        → 0.691  ← Ceiling for 41 raw pos
 Run 006  Feature engineering: depth-4, 105 → 0.622  ← Biggest jump yet (+0.069 vs Run 005)
 Run 007  Explicit threats:   depth-4, 110 → 0.633  ← REGRESSION: graded path_threat hurt model
 Run 008  Fix normalizations: depth-4, 110 → 0.607* ← Normalization fix confirmed on 15k; 50k underfitted at 100 epochs
-Run 009  Full convergence:   depth-4, 110 → TBD    ← Same 50k v4 data, 200 epochs
+Run 009  Full convergence:   depth-4, 110 → 0.625  ← Confirmed depth=4 data ceiling
+Run 010  Depth-5 teacher:   depth-5, 110 → 0.569  ← Biggest jump since Run 006 (+0.053)
 ```
 
 ---
@@ -45,6 +47,9 @@ Run 009  Full convergence:   depth-4, 110 → TBD    ← Same 50k v4 data, 200 e
 | Model capacity matters but has diminishing returns | Run 004→005: 3× params only bought 0.016 improvement |
 | 41 raw features cannot encode game-critical concepts | Run 005 in-game test: AI can't beat human, no tactical awareness |
 | Val loss is an imperfect proxy for playing strength | Best measure is human vs AI gameplay |
+| Depth=4 training data has a hard ceiling ~0.624 | Runs 008/009 both converged there regardless of epochs or data volume |
+| Stronger teacher depth dramatically improves leaf evaluations | Run 010: depth=5 data → 0.569 vs depth=4 data → 0.625 with same architecture |
+| 20% skip rate at depth=5 is acceptable | Surviving games are high quality; 12k depth=5 >> 50k depth=4 |
 
 ---
 
@@ -61,9 +66,8 @@ Run 009  Full convergence:   depth-4, 110 → TBD    ← Same 50k v4 data, 200 e
 
 ## Current Best Model
 
-**Run 008 (15k)** — `training/models/model_run008_15k.pt`
+**Run 010** — `training/models/model_run010.pt`
 - Architecture: 110→256→128→1
-- Val loss: **0.60674** ← best val loss seen across all runs
-- In-game: Not yet exported (superseded by Run 009)
-
-Run 006 (0.62254) remains deployed. Run 009 in progress — expected to beat 0.607.
+- Val loss: **0.56910** ← best val loss across all runs
+- Data: 15k games, depth=5 teacher, 2.0s time limit
+- In-game: pending export & test

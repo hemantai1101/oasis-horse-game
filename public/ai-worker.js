@@ -452,6 +452,13 @@ function generateOrderedMoves(snap) {
   return moves;
 }
 
+// ===== Position Hashing (for repetition detection) =====
+
+function boardHash(snap) {
+  return snap.horses.slice().sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map(h => `${h.id}:${h.col},${h.row}`).join('|');
+}
+
 // ===== Minimax =====
 
 let nodeCount = 0;
@@ -498,7 +505,11 @@ function minimax(snap, depth, alpha, beta, maximizing, deadline) {
 
 // ===== Root Search =====
 
-function getAIMove(snap) {
+// Penalty applied to moves that revisit a position already seen in the actual game.
+// Large enough to deter repetition; small enough to allow retreating when truly forced.
+const REPETITION_PENALTY = 3000;
+
+function getAIMove(snap, positionHistory) {
   const moves = generateOrderedMoves(snap);
   if (!moves.length) return null;
 
@@ -506,6 +517,9 @@ function getAIMove(snap) {
   if (winMove.move.col === CENTER.col && winMove.move.row === CENTER.row) {
     return { horseId: winMove.horseId, move: winMove.move };
   }
+
+  // Build a Set of previously seen board hashes for O(1) lookup.
+  const historySet = new Set(positionHistory || []);
 
   const timeBudget = 20000;
   const deadline = Date.now() + timeBudget;
@@ -523,7 +537,13 @@ function getAIMove(snap) {
     for (const candidate of moves) {
       if (Date.now() > deadline) { completed = false; break; }
       const child = applyMove(snap, candidate.horseId, candidate.move);
-      const val = minimax(child, depth - 1, -Infinity, +Infinity, false, deadline);
+      let val = minimax(child, depth - 1, -Infinity, +Infinity, false, deadline);
+
+      // Penalise moves that return to a position already played in the real game.
+      if (historySet.size > 0 && historySet.has(boardHash(child))) {
+        val -= REPETITION_PENALTY;
+      }
+
       if (val > depthBestVal) {
         depthBestVal = val;
         depthBestMove = candidate;
@@ -550,6 +570,6 @@ self.onmessage = function(e) {
   aiPlayerNumber = playerNumber;
   FORCE_HEURISTIC = forceHeuristic || false;
 
-  const result = getAIMove(snap);
+  const result = getAIMove(snap, snap.positionHistory || []);
   self.postMessage({ type: 'result', result });
 };

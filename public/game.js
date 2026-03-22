@@ -47,7 +47,14 @@ let GameState = {
   totalMoves: 0,
   forfeitReason: null,  // 'timeout' | null
   lastMove: null,       // { fromCol, fromRow, toCol, toRow } | null
+  positionHistory: [],  // hashes of board states after each move (for AI repetition detection)
 };
+
+// Returns a compact hash of all horse positions, stable across calls.
+function boardHash(horses) {
+  return horses.slice().sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map(h => `${h.id}:${h.col},${h.row}`).join('|');
+}
 
 
 // ===== Haptic Feedback =====
@@ -198,6 +205,7 @@ function initGame(isRestart = false) {
     totalMoves: 0,
     forfeitReason: null,
     lastMove: null,
+    positionHistory: [],
   };
   render();
 }
@@ -213,6 +221,7 @@ function startGame() {
   GameState.winner = null;
   GameState.forfeitReason = null;
   GameState.lastMove = null;
+  GameState.positionHistory = [];
   placeInitialHorses();
   render();
 }
@@ -297,6 +306,7 @@ function executeMove(horse, move) {
   horse.row = move.row;
   GameState.board[boardKey(move.col, move.row)] = horse;
   GameState.totalMoves++;
+  GameState.positionHistory.push(boardHash(GameState.horses));
 
   posthog.capture('move_executed', {
     player: PLAYER_NAME[GameState.currentPlayer],

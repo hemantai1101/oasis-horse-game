@@ -46,7 +46,7 @@ GAME_MIX = [
     ('depth3', 'random', 0.05),   # 5%  — P2 random
 ]
 
-MAX_MOVES   = 400   # safety cap — skip games that drag on too long
+MAX_MOVES   = 600   # safety cap — increased from 400 for depth=5 (stronger play → longer games)
 
 
 # ===== Single Game =====

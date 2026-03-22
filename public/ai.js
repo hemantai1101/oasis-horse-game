@@ -111,5 +111,10 @@ function snapshotFromGameState() {
   const horses = GameState.horses.map(h => ({ id: h.id, owner: h.owner, col: h.col, row: h.row }));
   const board = {};
   for (const h of horses) board[boardKey(h.col, h.row)] = h;
-  return { horses, board, currentPlayer: GameState.currentPlayer, lastMoveToCenter: false };
+  return {
+    horses, board,
+    currentPlayer: GameState.currentPlayer,
+    lastMoveToCenter: false,
+    positionHistory: GameState.positionHistory ? GameState.positionHistory.slice() : [],
+  };
 }
