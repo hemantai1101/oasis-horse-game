@@ -17,7 +17,9 @@ Master summary of all training runs. **Full details in `training/runs/run_NNN.md
 | [007](runs/run_007.md) | 2026-03-18 | 50k games, depth=4 | **110** | 110→256→128→1 | 0.63295 | ❌ Regression | path_threat graded (backfired) |
 | [008](runs/run_008.md) | 2026-03-19 | 15k+50k games, depth=4 | **110** | 110→256→128→1 | 0.60674 (15k) / 0.62827 (50k) | ❌ Underfitted at 100 epochs | Revert path_clear + fix normalizations |
 | [009](runs/run_009.md) | 2026-03-19 | 50k games, depth=4 | **110** | 110→256→128→1 | 0.62504 | ✅ Exported & tested | 200 epochs — confirmed depth=4 ceiling |
-| [010](runs/run_010.md) | 2026-03-21 | 15k games, depth=5 | **110** | 110→256→128→1 | **0.56910** | ✅ Best model | **depth=5 teacher — biggest jump since Run 006** |
+| [010](runs/run_010.md) | 2026-03-21 | 15k games, depth=5 | **110** | 110→256→128→1 | **0.56910** | ✅ Exported & tested | **depth=5 teacher — biggest jump since Run 006** |
+| [011](runs/run_011.md) | 2026-03-23 | 50k games, depth=5 | **110** | 110→256→128→1 | 0.64144 | ❌ Worse in-game than Run 010 | 3s time limit → longer games → noisy labels → overconfident model |
+| [012](runs/run_012.md) | TBD | 50k games, depth=5 | **110** | 110→256→128→1 | TBD | 🔄 Planned | Revert to 2s time limit — same volume as Run 011, clean data |
 
 ---
 
@@ -34,6 +36,8 @@ Run 007  Explicit threats:   depth-4, 110 → 0.633  ← REGRESSION: graded path
 Run 008  Fix normalizations: depth-4, 110 → 0.607* ← Normalization fix confirmed on 15k; 50k underfitted at 100 epochs
 Run 009  Full convergence:   depth-4, 110 → 0.625  ← Confirmed depth=4 data ceiling
 Run 010  Depth-5 teacher:   depth-5, 110 → 0.569  ← Biggest jump since Run 006 (+0.053)
+Run 011  Scale up:          depth-5, 50k, 3s     → 0.641  ← REGRESSION in-game: 3s limit → longer games → noisy labels → score inflation
+Run 012  Quality recovery:  depth-5, 50k, 2s     → TBD   ← Revert to 2s limit, same volume as Run 011 but clean data
 ```
 
 ---
@@ -50,6 +54,8 @@ Run 010  Depth-5 teacher:   depth-5, 110 → 0.569  ← Biggest jump since Run 0
 | Depth=4 training data has a hard ceiling ~0.624 | Runs 008/009 both converged there regardless of epochs or data volume |
 | Stronger teacher depth dramatically improves leaf evaluations | Run 010: depth=5 data → 0.569 vs depth=4 data → 0.625 with same architecture |
 | 20% skip rate at depth=5 is acceptable | Surviving games are high quality; 12k depth=5 >> 50k depth=4 |
+| Longer games hurt label quality more than more data helps | Run 011: 3s limit → 239 records/game → noisy labels → score inflation in-game |
+| Time limit is the most sensitive hyperparameter for data quality | 2s → decisive games with clean labels; 3s → ambiguous mid-game positions |
 
 ---
 
@@ -66,8 +72,7 @@ Run 010  Depth-5 teacher:   depth-5, 110 → 0.569  ← Biggest jump since Run 0
 
 ## Current Best Model
 
-**Run 010** — `training/models/model_run010.pt`
+**Run 010** — `training/models/model_run010.pt` ← current best in-game
 - Architecture: 110→256→128→1
-- Val loss: **0.56910** ← best val loss across all runs
+- Val loss: **0.56910**
 - Data: 15k games, depth=5 teacher, 2.0s time limit
-- In-game: pending export & test

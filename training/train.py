@@ -41,9 +41,9 @@ class ValueNet(nn.Module):
     """
     MLP: input_size → 256 → 128 → 1 (tanh output in [-1, 1]).
     Output = +1 means current player wins; -1 means current player loses.
-    input_size=105 for Run 001-006, 110 for Run 007+.
+    input_size=105 for Run 001-006, 110 for Run 007-012, 115 for Run 013+.
     """
-    def __init__(self, input_size=110):
+    def __init__(self, input_size=115):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(input_size, 256),
@@ -71,27 +71,58 @@ class GameDataset(Dataset):
                 f'Run: python generate_games.py to create it first.'
             )
 
-        # First pass: count lines to pre-allocate memory
+        def _valid(line):
+            line = line.strip()
+            if not line or '\x00' in line:
+                return False
+            try:
+                json.loads(line)
+                return True
+            except json.JSONDecodeError:
+                return False
+
+        # First pass: count valid lines to pre-allocate memory
         print(f"Counting records in {path}...")
         with open(path) as f:
-            num_lines = sum(1 for line in f if line.strip() and '\x00' not in line)
+            num_lines = sum(1 for line in f if _valid(line))
+
+        # Detect feature size from first valid record
+        input_size = 115  # default for Run 013+
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if line and '\x00' not in line:
+                    try:
+                        first = json.loads(line)
+                        input_size = len(first['features'])
+                        break
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+        self.input_size = input_size
 
         # Pre-allocate numpy arrays
-        features = np.zeros((num_lines, 110), dtype=np.float32)
+        features = np.zeros((num_lines, input_size), dtype=np.float32)
         labels = np.zeros(num_lines, dtype=np.float32)
 
         # Second pass: fill the arrays
-        print(f"Loading {num_lines:,} records...")
+        print(f"Loading {num_lines:,} records... (input_size={input_size})")
+        skipped = 0
         with open(path) as f:
             j = 0
             for line in f:
                 line = line.strip()
                 if not line or '\x00' in line:
                     continue
-                obj = json.loads(line)
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    skipped += 1
+                    continue
                 features[j] = obj['features']
                 labels[j] = obj['label']
                 j += 1
+        if skipped:
+            print(f"Skipped {skipped:,} corrupt lines.")
 
         self.X = torch.from_numpy(features)
         self.y = torch.from_numpy(labels)
@@ -133,7 +164,7 @@ def train(args):
     # --- Model ---
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Device: {device}')
-    model  = ValueNet().to(device)
+    model  = ValueNet(input_size=dataset.input_size).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f'Parameters: {n_params:,}')
 

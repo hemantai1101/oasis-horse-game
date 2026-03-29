@@ -128,6 +128,35 @@ function isInHome(h, player) {
   else              return (col >= 9 && row <= 3) || (col <= 3 && row >= 9);
 }
 
+function countLatentThreats(horses, board, player) {
+  // Horses on-axis with clear path to center but no matching backstop yet.
+  // One backstop-placement away from a full winning threat.
+  let count = 0;
+  for (const h of horses) {
+    const col = h.col, row = h.row;
+    if (col === CENTER.col && row === CENTER.row) continue;
+    if (col !== CENTER.col && row !== CENTER.row) continue;
+    const dc = col === CENTER.col ? 0 : (col < CENTER.col ? 1 : -1);
+    const dr = row === CENTER.row ? 0 : (row < CENTER.row ? 1 : -1);
+    let c = col + dc, r = row + dr;
+    let clear = true;
+    while (!(c === CENTER.col && r === CENTER.row)) {
+      if (board[boardKey(c, r)]) { clear = false; break; }
+      c += dc; r += dr;
+    }
+    if (!clear) continue;
+    let bs;
+    if (col === CENTER.col) {
+      bs = row < CENTER.row ? { col: 6, row: 7 } : { col: 6, row: 5 };
+    } else {
+      bs = col < CENTER.col ? { col: 7, row: 6 } : { col: 5, row: 6 };
+    }
+    const occ = board[boardKey(bs.col, bs.row)];
+    if (!occ || occ.owner !== player) count++;
+  }
+  return count;
+}
+
 function countPiecesBlockingOpp(myHorses, oppHorses) {
   let blocking = 0;
   for (const my of myHorses) {
@@ -228,13 +257,23 @@ function stateToFeatures(snap) {
   const myHorses  = snap.horses.filter(h => h.owner === cp);
   const oppHorses = snap.horses.filter(h => h.owner === opp);
 
-  feats.push(countWinningThreats(myHorses,  board, cp)  / 2.0);   // [105] my_winning_threats
-  feats.push(countWinningThreats(oppHorses, board, opp) / 2.0);   // [106] opp_winning_threats
-  feats.push(myHorses.filter(h  => isInHome(h, cp)).length  / 10.0); // [107] my_horses_at_home
-  feats.push(oppHorses.filter(h => isInHome(h, opp)).length / 10.0); // [108] opp_horses_at_home
-  feats.push(countPiecesBlockingOpp(myHorses, oppHorses) / 5.0);     // [109] my_pieces_blocking_opp
+  const myActive  = countWinningThreats(myHorses,  board, cp);
+  const oppActive = countWinningThreats(oppHorses, board, opp);
+  const myLatent  = countLatentThreats(myHorses,   board, cp);
+  const oppLatent = countLatentThreats(oppHorses,  board, opp);
 
-  return feats;  // length 110: 5 per horse × 20 horses + 4 backstop + 1 player + 5 global
+  feats.push(myActive  / 2.0);                                           // [105] my_winning_threats
+  feats.push(oppActive / 2.0);                                           // [106] opp_winning_threats
+  feats.push(myHorses.filter(h  => isInHome(h, cp)).length  / 10.0);    // [107] my_horses_at_home
+  feats.push(oppHorses.filter(h => isInHome(h, opp)).length / 10.0);    // [108] opp_horses_at_home
+  feats.push(countPiecesBlockingOpp(myHorses, oppHorses) / 5.0);        // [109] my_pieces_blocking_opp
+  feats.push(Math.min(myLatent,  4) / 4.0);                             // [110] my_latent_threats
+  feats.push(Math.min(oppLatent, 4) / 4.0);                             // [111] opp_latent_threats
+  feats.push(myActive  >= 2 ? 1.0 : 0.0);                               // [112] my_fork_flag
+  feats.push(oppActive >= 2 ? 1.0 : 0.0);                               // [113] opp_fork_flag
+  feats.push(myActive >= 1 && myLatent >= 1 ? 1.0 : 0.0);               // [114] my_near_fork_flag
+
+  return feats;  // length 115: 5 per horse × 20 horses + 4 backstop + 1 player + 10 global
 }
 
 function nnLayer(x, W, b, activation) {
@@ -381,6 +420,18 @@ function evaluate(snap) {
       if (!canBlock) score -= 500;
     }
   }
+
+  // 7. FORK BONUS — the key fix for attacking behaviour
+  const myActive  = countWinningThreats(aiHorses,  snap.board, ai);
+  const myLatent  = countLatentThreats(aiHorses,   snap.board, ai);
+  const oppActive = countWinningThreats(oppHorses, snap.board, opp);
+  const oppLatent = countLatentThreats(oppHorses,  snap.board, opp);
+
+  if (myActive >= 2)                        score += 15000;
+  else if (myActive >= 1 && myLatent >= 1)  score += 5000;
+
+  if (oppActive >= 2)                         score -= 15000;
+  else if (oppActive >= 1 && oppLatent >= 1)  score -= 5000;
 
   return score;
 }

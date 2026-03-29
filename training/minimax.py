@@ -17,7 +17,8 @@ import math
 import random
 from game import (
     CENTER, BOARD_SIZE, valid_moves, apply_move,
-    horses_to_board, is_won, state_to_features
+    horses_to_board, is_won, state_to_features,
+    count_winning_threats, count_latent_threats,
 )
 
 
@@ -188,6 +189,26 @@ def evaluate(snap, ai_player):
 
             if not can_block:
                 score -= 500
+
+    # 7. FORK BONUS — the key fix for attacking behaviour
+    #
+    # A fork (2+ simultaneous unblockable threats) is game-deciding: the opponent can
+    # only block one.  This bonus must dominate all other terms so the teacher AI
+    # commits to building forks rather than playing purely defensively.
+    my_active  = count_winning_threats(ai_horses,  board, ai)
+    my_latent  = count_latent_threats(ai_horses,   board, ai)
+    opp_active = count_winning_threats(opp_horses, board, opp)
+    opp_latent = count_latent_threats(opp_horses,  board, opp)
+
+    if my_active >= 2:
+        score += 15000      # fork: opponent can only block one threat
+    elif my_active >= 1 and my_latent >= 1:
+        score += 5000       # near-fork: one backstop placement from fork
+
+    if opp_active >= 2:
+        score -= 15000
+    elif opp_active >= 1 and opp_latent >= 1:
+        score -= 5000
 
     return score
 
@@ -382,9 +403,26 @@ def get_best_move(horses, board, player, depth=5, time_limit=2.0, epsilon=0.0):
 
     # Epsilon-greedy selection
     if random.random() < epsilon:
-        # Choose from top 3 moves, if available
-        num_top_moves = min(len(move_evals), 3)
-        chosen_eval = random.choice(move_evals[:num_top_moves])
+        if random.random() < 0.5:
+            # Standard: pick from top-3 by heuristic score
+            num_top_moves = min(len(move_evals), 3)
+            chosen_eval = random.choice(move_evals[:num_top_moves])
+        else:
+            # Attack-seeking: prefer moves that advance toward a fork
+            # (move onto axis, or move to a backstop cell)
+            bs_cells = {(6, 5), (6, 7), (5, 6), (7, 6)}
+            cx, cy = CENTER
+            attack_moves = [
+                m for m in move_evals
+                if (m['move']['col'], m['move']['row']) in bs_cells
+                or m['move']['col'] == cx
+                or m['move']['row'] == cy
+            ]
+            if attack_moves:
+                chosen_eval = random.choice(attack_moves[:5])
+            else:
+                num_top_moves = min(len(move_evals), 3)
+                chosen_eval = random.choice(move_evals[:num_top_moves])
     else:
         chosen_eval = move_evals[0]
 

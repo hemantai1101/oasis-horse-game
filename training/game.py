@@ -192,6 +192,43 @@ def is_in_home(h, player):
         return (col >= 9 and row <= 3) or (col <= 3 and row >= 9)
 
 
+def count_latent_threats(horse_list, board, player):
+    """
+    Count horses that are on-axis with a clear path to center but whose matching
+    backstop cell is NOT yet held by the player.  These are one backstop-placement
+    away from becoming a full winning threat.
+    """
+    count = 0
+    for h in horse_list:
+        col, row = h['col'], h['row']
+        if col == CENTER[0] and row == CENTER[1]:
+            continue  # already at center
+        if col != CENTER[0] and row != CENTER[1]:
+            continue  # not on axis
+        dc = 0 if col == CENTER[0] else (1 if col < CENTER[0] else -1)
+        dr = 0 if row == CENTER[1] else (1 if row < CENTER[1] else -1)
+        c, r = col + dc, row + dr
+        clear = True
+        while (c, r) != CENTER:
+            if (c, r) in board:
+                clear = False
+                break
+            c += dc
+            r += dr
+        if not clear:
+            continue
+        # Determine required backstop for this approach direction
+        if col == CENTER[0]:
+            bs = (6, 7) if row < CENTER[1] else (6, 5)
+        else:
+            bs = (7, 6) if col < CENTER[0] else (5, 6)
+        occupant = board.get(bs)
+        # Latent = no matching backstop yet (empty or opponent's)
+        if occupant is None or occupant['owner'] != player:
+            count += 1
+    return count
+
+
 def count_pieces_blocking_opp(my_horses, opp_horses):
     """Count my axis pieces that block an opponent piece further back on the same axis approach."""
     blocking = 0
@@ -229,7 +266,7 @@ def count_pieces_blocking_opp(my_horses, opp_horses):
 
 def state_to_features(horses, current_player, board=None):
     """
-    Encode a board position as a 110-element list of floats.
+    Encode a board position as a 115-element list of floats.
 
     Per horse × 20 horses = 100 features (P1 first, then P2, each sorted by col/row):
       [base+0] col_norm        = (col - 1) / 10
@@ -238,7 +275,7 @@ def state_to_features(horses, current_player, board=None):
       [base+3] on_axis         = 1.0 if col==6 or row==6, else 0.0
       [base+4] path_clear      = 1.0 if on_axis AND path to center is fully clear, else 0.0
 
-    Global features [100..109]:
+    Global features [100..114]:
       [100] backstop (6,5) — +1.0=current player, -1.0=opponent, 0.0=empty
       [101] backstop (6,7) — same
       [102] backstop (5,6) — same
@@ -249,6 +286,11 @@ def state_to_features(horses, current_player, board=None):
       [107] my_horses_at_home   / 10  — my pieces still in starting corner regions
       [108] opp_horses_at_home  / 10  — opponent pieces still in starting corner regions
       [109] my_pieces_blocking_opp / 5 — my axis pieces blocking an opp piece further back
+      [110] my_latent_threats   / 4   — on-axis + clear path, but backstop not yet placed
+      [111] opp_latent_threats  / 4   — same for opponent
+      [112] my_fork_flag              — 1.0 if I have 2+ simultaneous active threats (fork)
+      [113] opp_fork_flag             — 1.0 if opponent has 2+ simultaneous active threats
+      [114] my_near_fork_flag         — 1.0 if I have 1 active + 1 latent (one move from fork)
     """
     if board is None:
         board = horses_to_board(horses)
@@ -297,15 +339,25 @@ def state_to_features(horses, current_player, board=None):
 
     feats.append(0.0 if current_player == 1 else 1.0)
 
-    # New global features [105..109]
+    # Global features [105..114]
     opp_player = 3 - current_player
     my_horses  = [h for h in horses if h['owner'] == current_player]
     opp_horses = [h for h in horses if h['owner'] == opp_player]
 
-    feats.append(count_winning_threats(my_horses,  board, current_player) / 2.0)    # [105]
-    feats.append(count_winning_threats(opp_horses, board, opp_player)     / 2.0)    # [106]
+    my_active  = count_winning_threats(my_horses,  board, current_player)
+    opp_active = count_winning_threats(opp_horses, board, opp_player)
+    my_latent  = count_latent_threats(my_horses,   board, current_player)
+    opp_latent = count_latent_threats(opp_horses,  board, opp_player)
+
+    feats.append(my_active  / 2.0)                                                    # [105]
+    feats.append(opp_active / 2.0)                                                    # [106]
     feats.append(sum(1 for h in my_horses  if is_in_home(h, current_player)) / 10.0) # [107]
     feats.append(sum(1 for h in opp_horses if is_in_home(h, opp_player))     / 10.0) # [108]
     feats.append(count_pieces_blocking_opp(my_horses, opp_horses)             / 5.0)  # [109]
+    feats.append(min(my_latent,  4) / 4.0)                                            # [110]
+    feats.append(min(opp_latent, 4) / 4.0)                                            # [111]
+    feats.append(1.0 if my_active  >= 2 else 0.0)                                     # [112]
+    feats.append(1.0 if opp_active >= 2 else 0.0)                                     # [113]
+    feats.append(1.0 if my_active >= 1 and my_latent >= 1 else 0.0)                   # [114]
 
-    return feats  # length 110
+    return feats  # length 115

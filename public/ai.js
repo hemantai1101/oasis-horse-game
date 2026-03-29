@@ -9,7 +9,7 @@
 let NNWeights = null;
 
 // Set to true to force heuristic evaluation even when weights are loaded.
-const FORCE_HEURISTIC = false;
+const FORCE_HEURISTIC = true;
 
 async function loadNNModel() {
   try {

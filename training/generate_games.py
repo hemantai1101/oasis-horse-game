@@ -113,7 +113,10 @@ def apply_180_augmentation(examples):
       Backstop cells [100..103]:
         (6,5) ↔ (6,7)  and  (5,6) ↔ (7,6)  under 180° rotation
       Player indicator [104]: unchanged
-      New global features [105..109]: all invariant under 180° rotation — unchanged
+      Global features [105..109]: all invariant under 180° rotation — unchanged
+      Fork features  [110..114]: all invariant under 180° rotation — unchanged
+        (on-axis property and path-clear are both preserved by 180° rotation;
+         latent/active threat counts and fork flags are therefore also invariant)
     """
     augmented = []
     for ex in examples:
